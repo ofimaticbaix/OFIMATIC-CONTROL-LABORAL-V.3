@@ -36,8 +36,6 @@ export const WorkersView = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'deactivated'>('active');
   const [showPassword, setShowPassword] = useState(false);
   const [visibleCodes, setVisibleCodes] = useState<Record<string, boolean>>({});
-  const [editingCodeId, setEditingCodeId] = useState<string | null>(null);
-  const [editingCodeValue, setEditingCodeValue] = useState('');
   
   const [formData, setFormData] = useState({
     password: '',
@@ -123,8 +121,8 @@ export const WorkersView = () => {
     setIsDialogOpen(true);
   };
 
-  // AQUÍ ESTÁ EL CAMBIO: Dominio de Ofimatic Baix
-  const generateEmail = (dni: string) => `${dni.toLowerCase().replace(/[^a-z0-9]/g, '')}@ofimaticbaix.com`;
+  // ACTUALIZADO: Dominio corporativo Ofimatic
+  const generateEmail = (dni: string) => `${dni.toLowerCase().replace(/[^a-z0-9]/g, '')}@ofimatic.com`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,6 +281,18 @@ export const WorkersView = () => {
                      <Input id="password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value.slice(0, 12) })} readOnly={formData.role === 'worker'} />
                      <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>
                   </div>
+                  {/* BOTÓN REGENERAR RESTAURADO */}
+                  {formData.role === 'worker' && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={async () => setFormData({ ...formData, password: await generateUniqueCode() })} 
+                      className="mt-1 w-full"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-2"/> Regenerar Clave
+                    </Button>
+                  )}
                 </div>
               )}
               <div className="space-y-2"><Label>Tipo de cuenta</Label><Select value={formData.role} onValueChange={async (val: UserRole) => setFormData({ ...formData, role: val, password: val === 'worker' ? await generateUniqueCode() : '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent></Select></div>
