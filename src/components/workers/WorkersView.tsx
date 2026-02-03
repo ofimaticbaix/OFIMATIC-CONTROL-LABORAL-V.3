@@ -22,7 +22,6 @@ interface WorkerCredential {
   access_code: string;
 }
 
-// Extendemos la interfaz localmente por si no está actualizada en types.ts
 interface ExtendedProfile extends Profile {
   daily_hours?: number;
 }
@@ -40,14 +39,13 @@ export const WorkersView = () => {
   const [editingCodeId, setEditingCodeId] = useState<string | null>(null);
   const [editingCodeValue, setEditingCodeValue] = useState('');
   
-  // FORMULARIO: Añadimos dailyHours
   const [formData, setFormData] = useState({
     password: '',
     fullName: '',
     dni: '',
     position: '',
     role: 'worker' as UserRole,
-    dailyHours: '8', // Por defecto 8 horas
+    dailyHours: '8',
   });
   const { toast } = useToast();
 
@@ -125,7 +123,8 @@ export const WorkersView = () => {
     setIsDialogOpen(true);
   };
 
-  const generateEmail = (dni: string) => `${dni.toLowerCase().replace(/[^a-z0-9]/g, '')}@rescalewaves.com`;
+  // AQUÍ ESTÁ EL CAMBIO: Dominio de Ofimatic Baix
+  const generateEmail = (dni: string) => `${dni.toLowerCase().replace(/[^a-z0-9]/g, '')}@ofimaticbaix.com`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +141,7 @@ export const WorkersView = () => {
         dni: formData.dni, 
         position: formData.position || null, 
         role: formData.role,
-        daily_hours: hours // Guardamos horas contrato
+        daily_hours: hours
       }).eq('id', editingProfile.id);
 
       if (error) {
@@ -178,7 +177,6 @@ export const WorkersView = () => {
       const { data: newProfiles } = await supabase.from('profiles').select('*').eq('email', internalEmail).single();
 
       if (newProfiles) {
-        // Actualizamos datos extra incluyendo las horas
         await supabase.from('profiles').update({ 
             dni: formData.dni, 
             position: formData.position || null,
@@ -211,64 +209,24 @@ export const WorkersView = () => {
     toast({ title: 'Reactivado', description: 'Trabajador reactivado' });
   };
 
-  // --- 🔥 FUNCIÓN CORREGIDA PARA ELIMINAR SIN ERRORES 🔥 ---
   const handlePermanentDelete = async (profile: Profile) => {
     try {
-      // 1. Borrar fichajes
-      const { error: timeError } = await supabase.from('time_entries').delete().eq('user_id', profile.id);
-      if (timeError) throw timeError;
-
-      // 2. Borrar incidentes (Forma segura)
-      const { error: incidentError } = await supabase.from('incidents').delete().eq('user_id', profile.id);
-      if (incidentError) console.log("Nota: Error no crítico borrando incidentes", incidentError);
-
-      // 3. Borrar logs de auditoría
-      const { error: auditError } = await supabase.from('audit_logs').delete().eq('user_id', profile.id);
-      if (auditError) console.log("Nota: Error no crítico borrando auditoría", auditError);
-
-      // 4. Borrar credenciales si es trabajador
+      await supabase.from('time_entries').delete().eq('user_id', profile.id);
+      await supabase.from('incidents').delete().eq('user_id', profile.id);
+      await supabase.from('audit_logs').delete().eq('user_id', profile.id);
       if (profile.role === 'worker') {
-        const { error: credError } = await supabase.from('worker_credentials').delete().eq('user_id', profile.id);
-        if (credError) throw credError;
+        await supabase.from('worker_credentials').delete().eq('user_id', profile.id);
       }
-
-      // 5. Finalmente borrar el perfil
-      const { error: profileError } = await supabase.from('profiles').delete().eq('id', profile.id);
-      if (profileError) throw profileError;
+      await supabase.from('profiles').delete().eq('id', profile.id);
 
       loadProfiles();
       toast({ title: 'Eliminado', description: 'Trabajador y datos eliminados permanentemente' });
     } catch (error: any) {
-      console.error('Error eliminando:', error);
-      toast({ variant: 'destructive', title: 'Error', description: 'Fallo al eliminar: ' + (error.message || 'Error desconocido') });
+      toast({ variant: 'destructive', title: 'Error', description: 'Fallo al eliminar' });
     }
   };
 
-  const formatDate = (isoString: string) => new Date(isoString).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const toggleCodeVisibility = (userId: string) => setVisibleCodes(prev => ({ ...prev, [userId]: !prev[userId] }));
-  const handleEditCode = (userId: string, currentCode: string) => { setEditingCodeId(userId); setEditingCodeValue(currentCode); };
-  const handleCancelEditCode = () => { setEditingCodeId(null); setEditingCodeValue(''); };
-
-  const handleSaveCode = async (userId: string) => {
-    if (editingCodeValue.length !== 4 || !/^\d{4}$/.test(editingCodeValue)) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Debe ser de 4 dígitos' }); return;
-    }
-    const existingCodes = workerCredentials.filter(c => c.user_id !== userId).map(c => c.access_code);
-    if (existingCodes.includes(editingCodeValue)) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Clave en uso' }); return;
-    }
-    const { error } = await supabase.from('worker_credentials').update({ access_code: editingCodeValue }).eq('user_id', userId);
-    if (error) { toast({ variant: 'destructive', title: 'Error', description: 'Error al actualizar' }); return; }
-    toast({ title: 'Actualizado', description: 'Clave actualizada' });
-    setEditingCodeId(null); setEditingCodeValue(''); loadData();
-  };
-
-  const handleRegenerateCode = async (userId: string) => {
-    const newCode = await generateUniqueCode();
-    const { error } = await supabase.from('worker_credentials').update({ access_code: newCode }).eq('user_id', userId);
-    if (error) { toast({ variant: 'destructive', title: 'Error', description: 'Error al regenerar' }); return; }
-    toast({ title: 'Regenerada', description: `Nueva clave: ${newCode}` }); loadData();
-  };
 
   const activeProfiles = profiles.filter(p => p.is_active);
   const deactivatedProfiles = profiles.filter(p => !p.is_active);
@@ -300,7 +258,6 @@ export const WorkersView = () => {
               <div className="space-y-2"><Label htmlFor="fullName">Nombre completo *</Label><Input id="fullName" value={formData.fullName} onChange={(e) => setFormData({ ...formData, fullName: e.target.value })} placeholder="Nombre y apellidos" /></div>
               <div className="space-y-2"><Label htmlFor="dni">DNI/NIE *</Label><Input id="dni" value={formData.dni} onChange={(e) => setFormData({ ...formData, dni: e.target.value.toUpperCase() })} placeholder="12345678A" disabled={!!editingProfile} /></div>
               
-              {/* CAMPO NUEVO: HORAS DE JORNADA */}
               <div className="space-y-2">
                 <Label htmlFor="dailyHours">Horas Jornada Diaria (Contrato) *</Label>
                 <div className="relative">
@@ -317,7 +274,6 @@ export const WorkersView = () => {
                         placeholder="8" 
                     />
                 </div>
-                <p className="text-[10px] text-muted-foreground">Usado para calcular horas extra en el informe.</p>
               </div>
 
               {!editingProfile && (
@@ -327,7 +283,6 @@ export const WorkersView = () => {
                      <Input id="password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value.slice(0, 12) })} readOnly={formData.role === 'worker'} />
                      <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>
                   </div>
-                  {formData.role === 'worker' && <Button type="button" variant="outline" size="sm" onClick={async () => setFormData({ ...formData, password: await generateUniqueCode() })} className="mt-1 w-full"><RefreshCw className="h-3 w-3 mr-2"/> Regenerar Clave</Button>}
                 </div>
               )}
               <div className="space-y-2"><Label>Tipo de cuenta</Label><Select value={formData.role} onValueChange={async (val: UserRole) => setFormData({ ...formData, role: val, password: val === 'worker' ? await generateUniqueCode() : '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent></Select></div>
