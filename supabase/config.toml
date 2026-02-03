@@ -1,0 +1,7 @@
+project_id = "wlukrifbzgdpyxoapkff"
+
+[functions.secure-auth]
+verify_jwt = false
+
+[functions.seed-admin]
+verify_jwt = false
