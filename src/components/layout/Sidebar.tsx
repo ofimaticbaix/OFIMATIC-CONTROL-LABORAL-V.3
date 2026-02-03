@@ -15,7 +15,6 @@ const menuItems = [
   { id: 'clock', label: 'Fichaje', icon: Clock },
   { id: 'history', label: 'Mi Historial', icon: LayoutDashboard },
   { id: 'incidents', label: 'Incidencias', icon: AlertTriangle },
-  // 👇 NUEVO BOTÓN
   { id: 'vacations', label: 'Vacaciones', icon: Palmtree },
   
   // ADMIN
@@ -34,8 +33,9 @@ export const Sidebar = ({ currentView, onViewChange, profile, isAdmin, onLogout 
           <Clock className="h-6 w-6 text-primary-foreground" />
         </div>
         <div className="flex-1">
-          <h1 className="font-display text-lg font-bold tracking-tight uppercase">Control</h1>
-          <p className="text-xs font-medium tracking-widest text-sidebar-foreground/60 uppercase">Presencia</p>
+          {/* CAMBIO DE NOMBRE AQUÍ */}
+          <h1 className="font-display text-lg font-bold tracking-tight uppercase">Ofimatic</h1>
+          <p className="text-xs font-medium tracking-widest text-sidebar-foreground/60 uppercase">Control Laboral</p>
         </div>
         <ThemeToggle />
       </div>
