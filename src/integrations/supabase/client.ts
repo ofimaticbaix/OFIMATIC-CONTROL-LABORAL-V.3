@@ -1,4 +1,7 @@
-// Sustituye las líneas de SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY por estas:
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from './types';
+
+// Usamos las variables de entorno de Vercel
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
