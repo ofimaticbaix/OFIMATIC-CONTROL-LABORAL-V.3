@@ -23,11 +23,11 @@ type WorkType = 'office' | 'remote';
 const NON_PAUSING_INCIDENTS = ['meeting'];
 const MAX_WORK_HOURS = 10;
 
-// --- 📍 CONFIGURACIÓN OFIMATIC BAIX, S.L. ---
+// --- 📍 CONFIGURACIÓN OFICIAL OFIMATIC BAIX, S.L. ---
 const OFFICE_COORDS = {
   lat: 41.3580319,
   lng: 2.0728922,
-  address: "Carretera d'Esplugues 42, Local 2, Cornellà de Llobregat"
+  name: "OFIMATIC BAIX, S.L. (Sede Central)"
 };
 const MAX_DISTANCE_KM = 0.15; 
 
@@ -48,6 +48,7 @@ const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon
   return R * c;
 };
 
+// --- 🗺️ GEOPROCESADOR POSTAL (SIN NOMBRES DE NEGOCIOS) ---
 const fetchAddressFromCoords = async (lat: number, lng: number): Promise<string | null> => {
   try {
     const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
@@ -55,9 +56,10 @@ const fetchAddressFromCoords = async (lat: number, lng: number): Promise<string 
     });
     const data = await response.json();
     if (data && data.address) {
+        // Construimos la dirección limpia: Calle + Número + Ciudad
         const street = data.address.road || '';
         const number = data.address.house_number || '';
-        const city = data.address.city || data.address.town || '';
+        const city = data.address.city || data.address.town || 'Cornellà';
         return `${street} ${number}, ${city}`.trim();
     }
     return null;
@@ -114,11 +116,12 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
     const lat = (entry as any).gps_lat || (entry as any).location_lat;
     const lng = (entry as any).gps_lng || (entry as any).location_lng;
     const address = (entry as any).address || (entry as any).location_address || '';
+
     if (lat && lng && lat !== 0 && lng !== 0) {
         const distance = getDistanceFromLatLonInKm(lat, lng, OFFICE_COORDS.lat, OFFICE_COORDS.lng);
-        if (distance < MAX_DISTANCE_KM) return "OFIMATIC BAIX, S.L. (Sede Central)";
+        if (distance < MAX_DISTANCE_KM) return OFFICE_COORDS.name;
         if (address && address.length > 5 && !address.startsWith("41.")) return `📍 ${address}`;
-        return `📍 Remoto: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+        return `📍 Posición Remota: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
     }
     return address || "📍 Ubicación no disponible";
   };
@@ -132,7 +135,6 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
     return Math.max(0, (now - start - totalPausedMs) / (1000 * 60 * 60));
   }, [currentTime, todayEntry, isPaused]);
 
-  // --- FUNCIONES DE PAUSA (RECONSTRUIDAS) ---
   const handlePause = async () => { 
     if (!todayEntry || isPaused) return; 
     setPauseLoading(true); 
@@ -153,10 +155,6 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
     setLastAction('resume'); 
   };
 
-  const handleIncidentCreated = (incidentType: string) => { 
-    if (!NON_PAUSING_INCIDENTS.includes(incidentType) && !isPaused) handlePause(); 
-  };
-
   const handleClock = async () => {
     setClockingLoading(true);
     try {
@@ -166,7 +164,8 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
       const lat = position.coords.latitude; 
       const lng = position.coords.longitude;
       const distance = getDistanceFromLatLonInKm(lat, lng, OFFICE_COORDS.lat, OFFICE_COORDS.lng);
-      let realAddress = distance < MAX_DISTANCE_KM ? "OFIMATIC BAIX, S.L. (Sede Central)" : await fetchAddressFromCoords(lat, lng);
+      
+      let realAddress = distance < MAX_DISTANCE_KM ? OFFICE_COORDS.name : await fetchAddressFromCoords(lat, lng);
 
       if (!todayEntry) {
         const { error } = await supabase.rpc('clock_in_secure', { p_user_id: profile.id, p_work_type: workType, p_location_lat: lat, p_location_lng: lng, p_location_address: realAddress });
@@ -183,9 +182,11 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
       setTimeout(() => setShowSuccess(false), 3000); 
       onRecordCreated();
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Error', description: "Error al registrar ubicación." });
+      toast({ variant: 'destructive', title: 'Error', description: "Error de GPS." });
     } finally { setClockingLoading(false); }
   };
+
+  const handleIncidentCreated = (incidentType: string) => { if (!NON_PAUSING_INCIDENTS.includes(incidentType) && !isPaused) handlePause(); };
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>;
 
