@@ -29,7 +29,7 @@ const OFFICE_COORDS = {
   lng: 2.0728922,
   address: "Carretera d'Esplugues 42, Local 2, Cornellà de Llobregat"
 };
-const MAX_DISTANCE_KM = 0.15; // 150 metros de margen de confianza
+const MAX_DISTANCE_KM = 0.15; 
 
 const getBarcelonaDate = () => { try { return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }); } catch (e) { return new Date().toISOString().split('T')[0]; } };
 const formatDecimalHours = (decimal: number) => {
@@ -62,7 +62,6 @@ const fetchAddressFromCoords = async (lat: number, lng: number): Promise<string 
     }
     return null;
   } catch (error) {
-    console.error("Error obteniendo dirección:", error);
     return null;
   }
 };
@@ -93,13 +92,7 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
   const loadAdminData = async () => {
     setLoadingAdmin(true);
     const today = getBarcelonaDate();
-    const { data, error } = await supabase
-      .from('time_entries')
-      .select('*, profiles!inner(full_name, is_active)') 
-      .eq('profiles.is_active', true) 
-      .eq('date', today)             
-      .order('created_at', { ascending: false });
-
+    const { data, error } = await supabase.from('time_entries').select('*, profiles!inner(full_name, is_active)').eq('profiles.is_active', true).eq('date', today).order('created_at', { ascending: false });
     if (!error && data) setAdminEntries(data as unknown as TimeEntryWithProfile[]);
     setLoadingAdmin(false);
   };
@@ -113,36 +106,21 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
   const isCheckedIn = todayEntry?.clock_in && !todayEntry?.clock_out;
   const isCompleted = todayEntry?.clock_in && todayEntry?.clock_out;
   const isPaused = todayEntry?.is_paused ?? false;
+
   const formatTime = (isoString: string): string => new Date(isoString).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const formatDate = (isoString: string): string => new Date(isoString).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
   
-  // --- LÓGICA DE VISUALIZACIÓN PERSONALIZADA ---
   const getLocationString = (entry: TimeEntryWithProfile | TimeEntry) => {
     const lat = (entry as any).gps_lat || (entry as any).location_lat;
     const lng = (entry as any).gps_lng || (entry as any).location_lng;
     const address = (entry as any).address || (entry as any).location_address || '';
-
     if (lat && lng && lat !== 0 && lng !== 0) {
         const distance = getDistanceFromLatLonInKm(lat, lng, OFFICE_COORDS.lat, OFFICE_COORDS.lng);
-        if (distance < MAX_DISTANCE_KM) {
-            return "OFIMATIC BAIX, S.L. (Sede Central)";
-        } else {
-            if (address && address.length > 5 && !address.startsWith("41.")) {
-                return `📍 ${address}`;
-            }
-            return `📍 Remoto: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
-        }
+        if (distance < MAX_DISTANCE_KM) return "OFIMATIC BAIX, S.L. (Sede Central)";
+        if (address && address.length > 5 && !address.startsWith("41.")) return `📍 ${address}`;
+        return `📍 Remoto: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
     }
-
-    if (address) {
-        const cleanAddr = address.toLowerCase();
-        if (cleanAddr.includes("carretera d'esplugues") || cleanAddr.includes("esplugues 42")) {
-             return "OFIMATIC BAIX, S.L. (Sede Central)";
-        }
-        return `📍 ${address}`;
-    }
-
-    return "📍 Ubicación no disponible";
+    return address || "📍 Ubicación no disponible";
   };
 
   const currentWorkedHoursNum = useMemo(() => {
@@ -154,34 +132,44 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
     return Math.max(0, (now - start - totalPausedMs) / (1000 * 60 * 60));
   }, [currentTime, todayEntry, isPaused]);
 
+  // --- FUNCIONES DE PAUSA (RECONSTRUIDAS) ---
+  const handlePause = async () => { 
+    if (!todayEntry || isPaused) return; 
+    setPauseLoading(true); 
+    const { error } = await supabase.rpc('pause_secure', { p_entry_id: todayEntry.id }); 
+    setPauseLoading(false); 
+    if (error) { toast({ variant: 'destructive', title: 'Error', description: 'No se pudo pausar' }); return; } 
+    await loadActiveSession(); 
+    setLastAction('pause'); 
+  };
+
+  const handleResume = async () => { 
+    if (!todayEntry || !isPaused || !todayEntry.pause_started_at) return; 
+    setPauseLoading(true); 
+    const { error } = await supabase.rpc('resume_secure', { p_entry_id: todayEntry.id }); 
+    setPauseLoading(false); 
+    if (error) { toast({ variant: 'destructive', title: 'Error', description: 'No se pudo reanudar' }); return; } 
+    await loadActiveSession(); 
+    setLastAction('resume'); 
+  };
+
+  const handleIncidentCreated = (incidentType: string) => { 
+    if (!NON_PAUSING_INCIDENTS.includes(incidentType) && !isPaused) handlePause(); 
+  };
+
   const handleClock = async () => {
     setClockingLoading(true);
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => { 
-        if (!navigator.geolocation) reject(new Error("GEOLOCATION_NOT_SUPPORTED")); 
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 }); 
       });
-      
       const lat = position.coords.latitude; 
       const lng = position.coords.longitude;
       const distance = getDistanceFromLatLonInKm(lat, lng, OFFICE_COORDS.lat, OFFICE_COORDS.lng);
-      
-      let realAddress: string | null = null;
-
-      if (distance < MAX_DISTANCE_KM) {
-          realAddress = "OFIMATIC BAIX, S.L. (Sede Central)";
-      } else {
-          realAddress = await fetchAddressFromCoords(lat, lng);
-      }
+      let realAddress = distance < MAX_DISTANCE_KM ? "OFIMATIC BAIX, S.L. (Sede Central)" : await fetchAddressFromCoords(lat, lng);
 
       if (!todayEntry) {
-        const { error } = await supabase.rpc('clock_in_secure', { 
-            p_user_id: profile.id, 
-            p_work_type: workType, 
-            p_location_lat: lat, 
-            p_location_lng: lng, 
-            p_location_address: realAddress
-        });
+        const { error } = await supabase.rpc('clock_in_secure', { p_user_id: profile.id, p_work_type: workType, p_location_lat: lat, p_location_lng: lng, p_location_address: realAddress });
         if (error) throw error; 
         await loadActiveSession(); 
         setLastAction('in');
@@ -195,12 +183,12 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
       setTimeout(() => setShowSuccess(false), 3000); 
       onRecordCreated();
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Error de ubicación', description: "Asegúrate de tener el GPS activado." });
+      toast({ variant: 'destructive', title: 'Error', description: "Error al registrar ubicación." });
     } finally { setClockingLoading(false); }
   };
 
-  // ... (El resto del renderizado permanece igual que tu original)
-  // [AQUÍ CONTINUARÍA TU JSX ORIGINAL DESDE EL RETURN]
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>;
+
   return (
     <div className="space-y-8 w-full max-w-full overflow-hidden">
       <div className="space-y-2 animate-fade-in">
@@ -219,7 +207,6 @@ export const ClockInOut = ({ profile, onRecordCreated }: ClockInOutProps) => {
                       <div className="flex flex-col text-right"><span className="text-[10px] text-muted-foreground uppercase font-bold">Salida</span><span className="font-mono font-medium">{todayEntry.clock_out ? formatTime(todayEntry.clock_out) : '--:--'}</span></div>
                   </div>
                   {isCheckedIn && (<div className="relative w-full h-7 bg-muted/50 rounded-full overflow-hidden shadow-inner border border-black/5"><div className={cn("h-full transition-all duration-1000 ease-in-out shadow-sm flex items-center justify-end pr-2", "bg-emerald-500")} style={{ width: `${Math.min(100, (currentWorkedHoursNum / MAX_WORK_HOURS) * 100)}%` }} /></div>)}
-                  
                   <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 p-1.5 rounded-md"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate max-w-[200px] sm:max-w-[300px]">{getLocationString(todayEntry)}</span></div>
                 </CardContent></Card>
             )}
