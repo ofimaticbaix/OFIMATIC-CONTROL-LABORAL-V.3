@@ -25,6 +25,17 @@ export const WorkersView = () => {
   const [visibleCodes, setVisibleCodes] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
 
+  // Función para obtener horario por defecto
+  const getDefaultSchedule = () => ({
+    monday: { active: true, start: "09:00", end: "17:00" },
+    tuesday: { active: true, start: "09:00", end: "17:00" },
+    wednesday: { active: true, start: "09:00", end: "17:00" },
+    thursday: { active: true, start: "09:00", end: "17:00" },
+    friday: { active: true, start: "09:00", end: "17:00" },
+    saturday: { active: false, start: "09:00", end: "14:00" },
+    sunday: { active: false, start: "09:00", end: "14:00" }
+  });
+
   const [formData, setFormData] = useState<any>({
     fullName: '',
     dni: '',
@@ -62,19 +73,18 @@ export const WorkersView = () => {
         position: worker.position || '',
         accessCode: cred?.access_code || '',
         workDayType: worker.work_schedule ? 'Personalizada' : '8h',
-        work_schedule: worker.work_schedule || {
-          monday: { active: true, start: "09:00", end: "17:00" },
-          tuesday: { active: true, start: "09:00", end: "17:00" },
-          wednesday: { active: true, start: "09:00", end: "17:00" },
-          thursday: { active: true, start: "09:00", end: "17:00" },
-          friday: { active: true, start: "09:00", end: "17:00" },
-          saturday: { active: false, start: "09:00", end: "14:00" },
-          sunday: { active: false, start: "09:00", end: "14:00" }
-        }
+        work_schedule: worker.work_schedule || getDefaultSchedule()
       });
     } else {
       setEditingProfile(null);
-      setFormData({ fullName: '', dni: '', position: '', accessCode: '', workDayType: '8h', work_schedule: null });
+      setFormData({ 
+        fullName: '', 
+        dni: '', 
+        position: '', 
+        accessCode: '', 
+        workDayType: '8h', 
+        work_schedule: getDefaultSchedule() // Inicializamos con datos para evitar el error en nuevos
+      });
     }
     setIsDialogOpen(true);
   };
@@ -84,7 +94,6 @@ export const WorkersView = () => {
     setIsSaving(true);
     try {
       if (editingProfile) {
-        // Actualizar perfil y horario
         await supabase.from('profiles').update({
           full_name: formData.fullName,
           dni: formData.dni,
@@ -92,14 +101,13 @@ export const WorkersView = () => {
           work_schedule: formData.workDayType === 'Personalizada' ? formData.work_schedule : null
         }).eq('id', editingProfile.id);
 
-        // Actualizar PIN si se ha modificado
         await supabase.from('worker_credentials').update({ access_code: formData.accessCode }).eq('user_id', editingProfile.id);
       } else {
-        // Al insertar, el Trigger de SQL creará el PIN solo
         await supabase.from('profiles').insert({
           full_name: formData.fullName,
           dni: formData.dni,
-          position: formData.position
+          position: formData.position,
+          work_schedule: formData.workDayType === 'Personalizada' ? formData.work_schedule : null
         });
       }
       toast({ title: "Guardado", description: "Cambios aplicados con éxito." });
@@ -121,7 +129,6 @@ export const WorkersView = () => {
         </Button>
       </div>
 
-      {/* Tabla de trabajadores unificada */}
       <Table>
         <TableHeader className="bg-slate-900/50">
           <TableRow className="border-slate-800">
@@ -154,7 +161,6 @@ export const WorkersView = () => {
         </TableBody>
       </Table>
 
-      {/* DIÁLOGO UNIFICADO: Datos + PIN + Horario */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl bg-slate-950 text-white border-slate-800 shadow-2xl overflow-y-auto max-h-[90vh]">
           <DialogHeader><DialogTitle className="uppercase font-black text-xl">Ficha de Trabajador</DialogTitle></DialogHeader>
@@ -173,10 +179,21 @@ export const WorkersView = () => {
               <Label className="text-[10px] font-bold uppercase text-emerald-500">Jornada Laboral</Label>
               <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
                 <Button type="button" onClick={() => setFormData({...formData, workDayType: '8h'})} variant={formData.workDayType === '8h' ? 'secondary' : 'ghost'} className="flex-1 text-[10px] font-bold uppercase h-8">Estándar (8h)</Button>
-                <Button type="button" onClick={() => setFormData({...formData, workDayType: 'Personalizada'})} variant={formData.workDayType === 'Personalizada' ? 'default' : 'ghost'} className="flex-1 text-[10px] font-bold uppercase h-8">Personalizada</Button>
+                <Button 
+                  type="button" 
+                  onClick={() => setFormData({
+                    ...formData, 
+                    workDayType: 'Personalizada',
+                    work_schedule: formData.work_schedule || getDefaultSchedule() // Seguro contra nulos
+                  })} 
+                  variant={formData.workDayType === 'Personalizada' ? 'default' : 'ghost'} 
+                  className="flex-1 text-[10px] font-bold uppercase h-8"
+                >
+                  Personalizada
+                </Button>
               </div>
 
-              {formData.workDayType === 'Personalizada' && (
+              {formData.workDayType === 'Personalizada' && formData.work_schedule && (
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                   {Object.keys(formData.work_schedule).map(day => (
                     <div key={day} className="flex items-center justify-between text-[10px] p-2 bg-slate-900/30 rounded border border-slate-900">
