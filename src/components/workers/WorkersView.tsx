@@ -28,6 +28,7 @@ export const WorkersView = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'deactivated'>('active');
   const [visibleCodes, setVisibleCodes] = useState<Record<string, boolean>>({});
   const [isCustomSchedule, setIsCustomSchedule] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     password: '',
@@ -88,8 +89,8 @@ export const WorkersView = () => {
       setEditingProfile(profile);
       setIsCustomSchedule(!!profile.work_schedule);
       setFormData({
-        password: '',
-        fullName: profile.full_name,
+        ...formData,
+        fullName: profile.full_name || '',
         dni: profile.dni || '',
         position: profile.position || '',
         role: profile.role || 'worker',
@@ -114,48 +115,60 @@ export const WorkersView = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     const finalSchedule = isCustomSchedule ? formData.work_schedule : null;
 
-    if (editingProfile) {
-      const { error } = await supabase.from('profiles').update({
-        full_name: formData.fullName,
-        dni: formData.dni,
-        position: formData.position,
-        role: formData.role,
-        daily_hours: parseFloat(formData.dailyHours) || 8,
-        work_schedule: finalSchedule
-      }).eq('id', editingProfile.id);
+    try {
+      if (editingProfile) {
+        // Actualización Blindada
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: formData.fullName,
+            dni: formData.dni,
+            position: formData.position,
+            role: formData.role,
+            daily_hours: parseFloat(formData.dailyHours) || 8,
+            work_schedule: finalSchedule
+          })
+          .eq('id', editingProfile.id);
 
-      if (error) return toast({ variant: 'destructive', title: 'Error al actualizar' });
-      toast({ title: 'Actualizado correctamente' });
-    } else {
-      const internalEmail = `${formData.dni.toLowerCase()}@ofimatic.com`;
-      const authPass = `worker_${formData.password}_${formData.dni}`;
-      
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: internalEmail,
-        password: authPass,
-        options: { data: { full_name: formData.fullName, role: formData.role } }
-      });
+        if (error) throw error;
+        toast({ title: 'Éxito', description: 'Trabajador actualizado correctamente' });
+      } else {
+        // Lógica de Creación (SignUp)
+        const internalEmail = `${formData.dni.toLowerCase()}@ofimatic.com`;
+        const authPass = `worker_${formData.password}_${formData.dni}`;
+        
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: internalEmail,
+          password: authPass,
+          options: { data: { full_name: formData.fullName, role: formData.role } }
+        });
 
-      if (signUpError) return toast({ variant: 'destructive', title: 'Error', description: signUpError.message });
+        if (signUpError) throw signUpError;
 
-      if (data.user) {
-        await supabase.from('profiles').update({ 
-          dni: formData.dni, 
-          position: formData.position, 
-          daily_hours: parseFloat(formData.dailyHours) || 8,
-          work_schedule: finalSchedule 
-        }).eq('id', data.user.id);
+        if (data.user) {
+          await supabase.from('profiles').update({ 
+            dni: formData.dni, 
+            position: formData.position, 
+            daily_hours: parseFloat(formData.dailyHours) || 8,
+            work_schedule: finalSchedule 
+          }).eq('id', data.user.id);
 
-        if (formData.role === 'worker') {
-          await supabase.from('worker_credentials').insert({ user_id: data.user.id, access_code: formData.password });
+          if (formData.role === 'worker') {
+            await supabase.from('worker_credentials').insert({ user_id: data.user.id, access_code: formData.password });
+          }
         }
+        toast({ title: 'Éxito', description: 'Trabajador creado' });
       }
-      toast({ title: 'Trabajador creado' });
+      await loadData();
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message || 'No se pudo guardar' });
+    } finally {
+      setIsSaving(false);
     }
-    loadData();
-    setIsDialogOpen(false);
   };
 
   const handleDeactivate = async (id: string) => {
@@ -170,7 +183,7 @@ export const WorkersView = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4">
       <Loader2 className="animate-spin h-10 w-10 text-blue-500" />
-      <p className="text-slate-400 font-bold text-xs uppercase tracking-widest text-center">Sincronizando Plantilla...</p>
+      <p className="text-slate-400 font-bold text-xs uppercase tracking-widest text-center">Cargando...</p>
     </div>
   );
 
@@ -207,7 +220,7 @@ export const WorkersView = () => {
           <Table>
             <TableHeader className="bg-slate-950">
               <TableRow className="border-slate-800">
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Trabajador / DNI</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Trabajador</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Cargo / Rol</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN Acceso</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Jornada</TableHead>
@@ -225,19 +238,17 @@ export const WorkersView = () => {
                           {p.full_name}
                           {p.role === 'admin' && <ShieldAlert className="h-3 w-3 text-amber-500" title="Administrador" />}
                         </span>
-                        <span className="text-[10px] text-slate-500 font-mono tracking-tighter">{p.dni || 'SIN IDENTIFICACIÓN'}</span>
+                        <span className="text-[10px] text-slate-500 font-mono tracking-tighter">{p.dni || '---'}</span>
                       </div>
                     </TableCell>
                     <TableCell className="p-4">
                       <div className="flex flex-col gap-1">
                         <Badge variant="outline" className="text-[9px] font-bold uppercase border-slate-700 text-slate-300 w-fit">
-                          <Briefcase className="h-3 w-3 mr-1 text-blue-400" /> {p.position || 'SIN CARGO'}
+                          <Briefcase className="h-3 w-3 mr-1 text-blue-400" /> {p.position || '---'}
                         </Badge>
-                        {p.role === 'admin' ? (
-                          <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[9px] font-black w-fit uppercase">ADMINISTRADOR</Badge>
-                        ) : (
-                          <Badge className="bg-slate-800 text-slate-500 text-[9px] font-black w-fit uppercase border-slate-700">TRABAJADOR</Badge>
-                        )}
+                        <Badge className={`${p.role === 'admin' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-800 text-slate-500'} text-[9px] font-black w-fit uppercase`}>
+                          {p.role === 'admin' ? 'ADMIN' : 'WORKER'}
+                        </Badge>
                       </div>
                     </TableCell>
                     <TableCell className="p-4 text-center">
@@ -256,28 +267,27 @@ export const WorkersView = () => {
                     </TableCell>
                     <TableCell className="p-4">
                       {p.work_schedule ? (
-                        <Badge className="bg-blue-600/10 text-blue-400 border-blue-600/20 text-[9px] font-black uppercase tracking-widest">Cuadrante Variable</Badge>
+                        <Badge className="bg-blue-600/10 text-blue-400 border-blue-600/20 text-[9px] font-black uppercase tracking-widest">Cuadrante</Badge>
                       ) : (
-                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest">{p.daily_hours || 8}h Diarias</Badge>
+                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest">{p.daily_hours || 8}h Fijo</Badge>
                       )}
                     </TableCell>
                     <TableCell className="p-4 text-right">
                       <div className="flex justify-end gap-1">
                         <MonthlyReportDialog profile={p} />
                         <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)} className="text-blue-500 hover:bg-blue-500/10"><Pencil className="h-4 w-4" /></Button>
-                        
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button>
                           </AlertDialogTrigger>
-                          <AlertDialogContent className="bg-slate-950 border-slate-800 text-white shadow-2xl">
+                          <AlertDialogContent className="bg-slate-950 border-slate-800 text-white">
                             <AlertDialogHeader>
-                              <AlertDialogTitle className="uppercase font-black tracking-tighter text-xl">Confirmar Baja</AlertDialogTitle>
-                              <AlertDialogDescription className="text-slate-400">¿Seguro que quieres desactivar a {p.full_name}? Se moverá a la lista de bajas y no podrá fichar.</AlertDialogDescription>
+                              <AlertDialogTitle className="uppercase font-black tracking-tighter">¿Desactivar?</AlertDialogTitle>
+                              <AlertDialogDescription className="text-slate-400 text-sm">¿Deseas dar de baja a {p.full_name}?</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel className="bg-slate-900 border-slate-800">Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeactivate(p.id)} className="bg-red-600 hover:bg-red-700 font-bold uppercase text-xs">Desactivar</AlertDialogAction>
+                              <AlertDialogCancel className="bg-slate-900 border-slate-800">No</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeactivate(p.id)} className="bg-red-600 hover:bg-red-700">Sí, Desactivar</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
@@ -291,7 +301,6 @@ export const WorkersView = () => {
         </Card>
       </Tabs>
 
-      {/* MODAL DE EDICIÓN / ALTA */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl bg-slate-950 text-white border-slate-800 shadow-2xl">
           <DialogHeader className="border-b border-slate-900 pb-4 mb-4">
@@ -301,23 +310,14 @@ export const WorkersView = () => {
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Nombre Completo</Label>
-                <Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-slate-900 border-slate-800" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">DNI / NIE</Label>
-                <Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-slate-900 border-slate-800" disabled={!!editingProfile} />
-              </div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Nombre</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">DNI / NIE</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-slate-900 border-slate-800" disabled={!!editingProfile} /></div>
             </div>
 
             <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Cargo / Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-slate-900 border-slate-800" placeholder="Ej: Estilista" /></div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Cargo / Puesto</Label>
-                <Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-slate-900 border-slate-800" placeholder="Ej: Estilista" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Rol del Sistema</Label>
+                <Label className="text-[10px] uppercase font-bold text-slate-500">Rol</Label>
                 <Select value={formData.role} onValueChange={(val) => setFormData({...formData, role: val})}>
                   <SelectTrigger className="bg-slate-900 border-slate-800"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white">
@@ -349,7 +349,7 @@ export const WorkersView = () => {
                           <span className="text-slate-600 font-bold uppercase text-[9px]">A</span>
                           <Input type="time" value={config.end} onChange={e => handleDayChange(day, 'end', e.target.value)} className="h-8 w-24 bg-slate-950 border-slate-800 text-[10px] font-mono" />
                         </div>
-                      ) : <span className="text-slate-700 italic text-[10px] font-bold uppercase tracking-widest text-right flex-1">No Laborable</span>}
+                      ) : <span className="text-slate-700 italic text-[10px] font-bold uppercase text-right flex-1 tracking-widest">No Laborable</span>}
                     </div>
                   ))}
                 </div>
@@ -359,8 +359,9 @@ export const WorkersView = () => {
             </div>
             
             <DialogFooter className="pt-2">
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-900/20 text-xs font-black uppercase tracking-widest h-11">
-                <Save className="h-4 w-4 mr-2" /> Guardar Cambios
+              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-900/20 text-xs font-black uppercase tracking-widest h-11">
+                {isSaving ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />} 
+                {editingProfile ? 'Actualizar Ficha' : 'Crear Trabajador'}
               </Button>
             </DialogFooter>
           </form>
