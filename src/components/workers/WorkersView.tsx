@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+// IMPORTACIÓN CORREGIDA AQUÍ
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -56,7 +57,7 @@ export const WorkersView = () => {
       setProfiles(profilesData || []);
       setWorkerCredentials(credsData || []);
     } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los trabajadores.' });
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos.' });
     } finally {
       setLoading(false);
     }
@@ -138,7 +139,7 @@ export const WorkersView = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black uppercase tracking-tighter text-white italic">Plantilla</h2>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Gestión de Perfiles y Jornadas</p>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Gestión de Personal</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative w-full md:w-64">
@@ -165,8 +166,8 @@ export const WorkersView = () => {
         <Card className="bg-slate-900 border-slate-800 mt-4 overflow-hidden shadow-2xl">
           <Table>
             <TableHeader className="bg-slate-950">
-              <TableRow className="border-slate-800 hover:bg-transparent">
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Trabajador / DNI</TableHead>
+              <TableRow className="border-slate-800">
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Trabajador</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Cargo / Rol</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN Acceso</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-right">Acciones</TableHead>
@@ -174,7 +175,7 @@ export const WorkersView = () => {
             </TableHeader>
             <TableBody>
               {filteredProfiles.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-10 text-slate-500 italic uppercase text-xs">No hay trabajadores para mostrar</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center py-10 text-slate-500 italic uppercase text-xs">No hay trabajadores</TableCell></TableRow>
               ) : filteredProfiles.map(p => (
                 <TableRow key={p.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
                   <TableCell className="p-4">
@@ -207,10 +208,10 @@ export const WorkersView = () => {
                       <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)} className="text-blue-500 hover:bg-blue-500/10"><Pencil className="h-4 w-4" /></Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent className="bg-slate-950 border-slate-800 text-white shadow-2xl">
+                        <AlertDialogContent className="bg-slate-950 border-slate-800 text-white">
                           <AlertDialogHeader>
-                            <AlertDialogTitle className="uppercase font-black tracking-tighter text-xl">Confirmar Baja</AlertDialogTitle>
-                            <AlertDialogDescription className="text-slate-400">¿Seguro que quieres desactivar a {p.full_name}? Se moverá a la lista de bajas.</AlertDialogDescription>
+                            <AlertDialogTitle className="uppercase font-black text-xl">Confirmar Baja</AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-400">¿Desactivar a {p.full_name}?</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel className="bg-slate-900 border-slate-800">Cancelar</AlertDialogCancel>
@@ -235,19 +236,19 @@ export const WorkersView = () => {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl bg-slate-950 text-white border-slate-800 shadow-2xl">
           <DialogHeader className="border-b border-slate-900 pb-4 mb-4">
-            <DialogTitle className="uppercase font-black text-xl tracking-tighter flex items-center gap-2">
+            <DialogTitle className="uppercase font-black text-xl flex items-center gap-2">
               <UserCog className="text-blue-500 h-5 w-5" /> Ficha de Personal
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Nombre</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
               <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">DNI / NIE</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-slate-900 border-slate-800" disabled={!!editingProfile} /></div>
             </div>
             <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Cargo / Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Cargo</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Rol del Sistema</Label>
+                <Label className="text-[10px] uppercase font-bold text-slate-500">Rol</Label>
                 <Select value={formData.role} onValueChange={(val) => setFormData({...formData, role: val})}>
                   <SelectTrigger className="bg-slate-900 border-slate-800"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white">
@@ -258,7 +259,7 @@ export const WorkersView = () => {
               </div>
             </div>
             <DialogFooter className="pt-2">
-              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-900/20 text-xs font-black uppercase tracking-widest h-11">
+              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 text-xs font-black uppercase tracking-widest h-11">
                 {isSaving ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />} 
                 {editingProfile ? 'Actualizar Ficha' : 'Crear Trabajador'}
               </Button>
