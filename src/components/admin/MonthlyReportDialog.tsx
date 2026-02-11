@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { FileText, Printer, X, Calendar, Download } from 'lucide-react';
+import { FileText, Printer, X, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Profile } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
 
-// Definición local de la interfaz para evitar errores si no está en types
+// Interfaces locales para garantizar compatibilidad
 interface WeeklySchedule {
   monday: { active: boolean; totalHours: number };
   tuesday: { active: boolean; totalHours: number };
@@ -50,9 +48,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
   };
 
-  // --- 📏 LÓGICA DE HORARIO FLEXIBLE ---
   const getExpectedHoursForDate = (date: Date): number => {
-    // 1. Si existe un horario detallado (cuadrante)
     if (profile.work_schedule) {
         const dayIndex = date.getDay();
         const keys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -61,14 +57,12 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
         return daySchedule?.active ? daySchedule.totalHours : 0;
     }
 
-    // 2. Si no hay horario pero hay horas semanales (flexible)
     if (profile.weekly_hours) {
         const day = date.getDay();
-        if (day === 0 || day === 6) return 0; // Fines de semana por defecto 0h
+        if (day === 0 || day === 6) return 0;
         return profile.weekly_hours / 5;
     }
 
-    // 3. Valor por defecto (8h)
     const day = date.getDay();
     if (day === 0 || day === 6) return 0;
     return profile.daily_hours || 8;
@@ -138,25 +132,39 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     setLoading(false);
   };
 
-  const handleDownloadPDF = () => {
-    const element = printRef.current;
-    if (!element) return;
+  const handlePrint = () => {
+    const printContent = printRef.current;
+    if (!printContent) return;
 
-    const opt = {
-      margin: 10,
-      filename: `Informe_${profile.full_name}_${selectedMonth}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    if (typeof html2pdf !== 'undefined') {
-        html2pdf().set(opt).from(element).save().catch((err: any) => {
-            toast({ variant: "destructive", title: "Error", description: "Fallo al generar el PDF" });
-        });
-        toast({ title: "PDF Generado", description: "El informe se ha descargado correctamente." });
-    } else {
-        toast({ variant: "destructive", title: "Error", description: "Librería PDF no cargada" });
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(`
+        <html>
+          <head>
+            <title>Informe - ${profile.full_name}</title>
+            <style>
+              body { font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 20px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+              th, td { border: 1px solid #000; padding: 5px; text-align: center; }
+              th { background-color: #eee; font-weight: bold; }
+              .header { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 5px; }
+              .info-grid { display: flex; justify-content: space-between; margin-top: 10px; border: 1px solid #000; padding: 10px; }
+              .footer { margin-top: 30px; display: flex; justify-content: space-between; }
+              .signature-box { width: 40%; border-top: 1px solid #000; padding-top: 5px; text-align: center; }
+            </style>
+          </head>
+          <body>${printContent.innerHTML}</body>
+        </html>
+      `);
+      doc.close();
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => { document.body.removeChild(iframe); }, 1000);
     }
   };
 
@@ -171,22 +179,22 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0 bg-white text-black">
         <div className="p-4 border-b flex justify-between items-center bg-gray-50">
           <div className="flex items-center gap-4">
-             <h3 className="font-bold text-lg text-black">Vista Previa del Informe</h3>
+             <h3 className="font-bold text-lg text-black text-left">Vista Previa</h3>
              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border rounded p-1 text-sm bg-white text-black" />
           </div>
           <div className="flex gap-2 text-black">
-            <Button onClick={handleDownloadPDF} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
-              <Download className="h-4 w-4" /> Descargar PDF
+            <Button onClick={handlePrint} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+              <Printer className="h-4 w-4" /> Imprimir / PDF
             </Button>
             <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-black"><X className="h-4 w-4" /></Button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-8 bg-gray-100">
+        <div className="flex-1 overflow-auto p-8 bg-gray-200">
            <div id="report-content" ref={printRef} className="bg-white shadow-lg p-10 max-w-[21cm] mx-auto min-h-[29.7cm] text-black">
               <div className="header border-b-2 border-black pb-4 mb-6">
                  <div className="flex justify-between items-end">
-                    <div>
+                    <div className="text-left">
                       <h1 className="text-xl font-bold uppercase">Registro de Jornada Laboral</h1>
                       <p className="text-[10px] mt-1 text-gray-500">Conforme al Art. 34.9 del Estatuto de los Trabajadores</p>
                     </div>
@@ -195,13 +203,13 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
                     </div>
                  </div>
 
-                 <div className="info-grid grid grid-cols-2 gap-8 mt-6 border p-4 rounded-sm">
-                    <div>
+                 <div className="info-grid text-sm text-left">
+                    <div className="space-y-1">
                         <p className="text-xs uppercase text-gray-500 font-bold">Empresa</p>
                         <p className="font-bold text-lg">AN STILE UNISEX S.L.</p> 
-                        <p className="text-sm">DNI: 47611686-F</p> 
+                        <p className="text-sm">CIF: B-12345678</p> 
                     </div>
-                    <div>
+                    <div className="space-y-1 text-right">
                         <p className="text-xs uppercase text-gray-500 font-bold">Trabajador/a</p>
                         <p className="font-bold uppercase text-lg">{profile.full_name}</p>
                         <p className="text-sm">DNI/NIE: {profile.dni || '---'}</p>
@@ -224,7 +232,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={7} className="py-10 text-center">Generando informe...</td></tr>
+                    <tr><td colSpan={7} className="py-10 text-center">Generando...</td></tr>
                   ) : (
                     reportData.map((day) => (
                       <tr key={day.date} className={`text-center ${day.isWeekend ? 'bg-gray-50' : ''}`}>
@@ -255,16 +263,12 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
                 </tfoot>
               </table>
 
-              <div className="mt-8 text-[9px] text-justify text-gray-600 leading-tight">
-                 <p>El trabajador/a declara haber recibido copia de este registro y estar conforme con las horas reflejadas. Este documento tiene validez legal conforme a lo establecido en el Art. 34.9 del Estatuto de los Trabajadores.</p>
-              </div>
-
               <div className="footer mt-12 flex justify-between">
                  <div className="w-[40%] border-t border-black pt-2 text-center">
-                    <p className="text-[10px] uppercase font-bold">Firma de la Empresa</p>
+                    <p className="text-[10px] uppercase font-bold">Firma Empresa</p>
                  </div>
                  <div className="w-[40%] border-t border-black pt-2 text-center">
-                    <p className="text-[10px] uppercase font-bold">Firma del Trabajador/a</p>
+                    <p className="text-[10px] uppercase font-bold">Firma Trabajador/a</p>
                  </div>
               </div>
            </div>
