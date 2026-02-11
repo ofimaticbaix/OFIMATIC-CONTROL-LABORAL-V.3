@@ -3,13 +3,25 @@ import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { FileText, Printer, X, Calendar, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Profile, WeeklySchedule } from '@/types';
+import { Profile } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
+// Definición local de la interfaz para evitar errores si no está en types
+interface WeeklySchedule {
+  monday: { active: boolean; totalHours: number };
+  tuesday: { active: boolean; totalHours: number };
+  wednesday: { active: boolean; totalHours: number };
+  thursday: { active: boolean; totalHours: number };
+  friday: { active: boolean; totalHours: number };
+  saturday: { active: boolean; totalHours: number };
+  sunday: { active: boolean; totalHours: number };
+}
+
 interface ExtendedProfile extends Profile {
   daily_hours?: number;
+  weekly_hours?: number;
   work_schedule?: WeeklySchedule | null;
 }
 
@@ -38,34 +50,33 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
   };
 
+  // --- 📏 LÓGICA DE HORARIO FLEXIBLE ---
   const getExpectedHoursForDate = (date: Date): number => {
-    // 1. Si no hay horario personalizado, usamos el fijo
-    if (!profile.work_schedule) {
-        const day = date.getDay();
-        if (day === 0 || day === 6) return 0; // Fines de semana 0h
-        return profile.daily_hours || 8;
+    // 1. Si existe un horario detallado (cuadrante)
+    if (profile.work_schedule) {
+        const dayIndex = date.getDay();
+        const keys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayKey = keys[dayIndex];
+        const daySchedule = (profile.work_schedule as any)[dayKey];
+        return daySchedule?.active ? daySchedule.totalHours : 0;
     }
 
-    // 2. Si HAY horario personalizado
-    const dayIndex = date.getDay();
-    // Forzamos a TS a saber que existe con el signo !
-    const schedule = profile.work_schedule!; 
-    
-    // Usamos claves genéricas para evitar errores de tipado estricto
-    const keys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayKey = keys[dayIndex];
-    
-    // Accedemos como 'any' para evitar que TS se queje si las claves no coinciden perfecto
-    const daySchedule = (schedule as any)[dayKey];
+    // 2. Si no hay horario pero hay horas semanales (flexible)
+    if (profile.weekly_hours) {
+        const day = date.getDay();
+        if (day === 0 || day === 6) return 0; // Fines de semana por defecto 0h
+        return profile.weekly_hours / 5;
+    }
 
-    return daySchedule?.active ? daySchedule.totalHours : 0;
+    // 3. Valor por defecto (8h)
+    const day = date.getDay();
+    if (day === 0 || day === 6) return 0;
+    return profile.daily_hours || 8;
   };
 
   const generateReport = async () => {
     setLoading(true);
     const [year, month] = selectedMonth.split('-');
-    
-    // Calcular fechas inicio y fin
     const startDate = `${year}-${month}-01`;
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
     const endDate = `${year}-${month}-${lastDay}`;
@@ -76,7 +87,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
       .eq('user_id', profile.id)
       .gte('date', startDate)
       .lte('date', endDate)
-      .order('created_at', { ascending: true });
+      .order('date', { ascending: true });
 
     if (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos.' });
@@ -90,7 +101,6 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     for (let day = 1; day <= lastDay; day++) {
       const currentDayStr = `${year}-${month}-${day.toString().padStart(2, '0')}`;
       const dayEntries = entries?.filter(e => e.date === currentDayStr) || [];
-
       let dayTotalHours = 0;
       let firstEntry = '-';
       let lastExit = '-';
@@ -103,16 +113,12 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
         if (lastEntry.clock_out) {
             lastExit = new Date(lastEntry.clock_out).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
         }
-        dayEntries.forEach(e => {
-            if (e.hours_worked) dayTotalHours += e.hours_worked;
-        });
+        dayEntries.forEach(e => { if (e.hours_worked) dayTotalHours += e.hours_worked; });
       }
 
       monthlyTotal += dayTotalHours;
-
       const dateObj = new Date(parseInt(year), parseInt(month) - 1, day);
       const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-      
       const dailyContractHours = getExpectedHoursForDate(dateObj);
 
       processedDays.push({
@@ -122,7 +128,6 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
         firstEntry,
         lastExit,
         totalHours: dayTotalHours,
-        entriesCount: dayEntries.length,
         isWeekend,
         contractHours: dailyContractHours
       });
@@ -137,26 +142,19 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     const element = printRef.current;
     if (!element) return;
 
-    // Configuración del PDF
     const opt = {
-      margin:       10,
-      filename:     `Informe_${profile.full_name}_${selectedMonth}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true }, // useCORS ayuda si hay imágenes externas
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      margin: 10,
+      filename: `Informe_${profile.full_name}_${selectedMonth}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    // Llamada segura a la librería
-    if (html2pdf) {
+    if (typeof html2pdf !== 'undefined') {
         html2pdf().set(opt).from(element).save().catch((err: any) => {
-            console.error("Error al generar PDF:", err);
             toast({ variant: "destructive", title: "Error", description: "Fallo al generar el PDF" });
         });
-        
-        toast({
-            title: "PDF Generado",
-            description: "El informe se ha descargado correctamente."
-        });
+        toast({ title: "PDF Generado", description: "El informe se ha descargado correctamente." });
     } else {
         toast({ variant: "destructive", title: "Error", description: "Librería PDF no cargada" });
     }
@@ -166,36 +164,31 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <FileText className="h-4 w-4" />
-          Informe
+          <FileText className="h-4 w-4" /> Informe
         </Button>
       </DialogTrigger>
       
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0 bg-white text-black">
         <div className="p-4 border-b flex justify-between items-center bg-gray-50">
           <div className="flex items-center gap-4">
-             <h3 className="font-bold text-lg">Vista Previa del Informe</h3>
-             <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-gray-500" />
-                <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border rounded p-1 text-sm" />
-             </div>
+             <h3 className="font-bold text-lg text-black">Vista Previa del Informe</h3>
+             <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border rounded p-1 text-sm bg-white text-black" />
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleDownloadPDF} className="gap-2 bg-blue-600 hover:bg-blue-700">
+          <div className="flex gap-2 text-black">
+            <Button onClick={handleDownloadPDF} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
               <Download className="h-4 w-4" /> Descargar PDF
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-black"><X className="h-4 w-4" /></Button>
           </div>
         </div>
 
         <div className="flex-1 overflow-auto p-8 bg-gray-100">
            <div id="report-content" ref={printRef} className="bg-white shadow-lg p-10 max-w-[21cm] mx-auto min-h-[29.7cm] text-black">
-              
               <div className="header border-b-2 border-black pb-4 mb-6">
                  <div className="flex justify-between items-end">
                     <div>
                       <h1 className="text-xl font-bold uppercase">Registro de Jornada Laboral</h1>
-                      <p className="text-xs mt-1 text-gray-500">Conforme al Art. 34.9 del Estatuto de los Trabajadores</p>
+                      <p className="text-[10px] mt-1 text-gray-500">Conforme al Art. 34.9 del Estatuto de los Trabajadores</p>
                     </div>
                     <div className="text-right">
                       <h2 className="text-xl font-bold">{selectedMonth}</h2>
@@ -211,27 +204,22 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
                     <div>
                         <p className="text-xs uppercase text-gray-500 font-bold">Trabajador/a</p>
                         <p className="font-bold uppercase text-lg">{profile.full_name}</p>
-                        <p className="text-sm">DNI/NIE: {profile.dni || 'PENDIENTE'}</p>
-                        <p className="text-sm">Puesto: {profile.position || 'General'}</p>
-                        <p className="text-sm mt-1">
-                            Jornada: <strong>
-                                {profile.work_schedule ? 'Según Cuadrante' : `${profile.daily_hours || 8}h / día`}
-                            </strong>
-                        </p>
+                        <p className="text-sm">DNI/NIE: {profile.dni || '---'}</p>
+                        <p className="text-sm">Jornada: <strong>{profile.work_schedule ? 'Según Cuadrante' : `${profile.weekly_hours || 40}h Semanales`}</strong></p>
                     </div>
                  </div>
               </div>
 
-              <table className="w-full border-collapse text-sm">
+              <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border p-2 w-24">Fecha</th>
-                    <th className="border p-2 w-16">Día</th>
-                    <th className="border p-2">Entrada</th>
-                    <th className="border p-2">Salida</th>
-                    <th className="border p-2">Ordinarias</th>
-                    <th className="border p-2">Extras</th>
-                    <th className="border p-2">Firma</th>
+                    <th className="border border-black p-2">Fecha</th>
+                    <th className="border border-black p-2">Día</th>
+                    <th className="border border-black p-2">Entrada</th>
+                    <th className="border border-black p-2">Salida</th>
+                    <th className="border border-black p-2">Ordinarias</th>
+                    <th className="border border-black p-2">Extras</th>
+                    <th className="border border-black p-2 w-20">Firma</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -240,47 +228,46 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
                   ) : (
                     reportData.map((day) => (
                       <tr key={day.date} className={`text-center ${day.isWeekend ? 'bg-gray-50' : ''}`}>
-                        <td className="border p-2">{new Date(day.date).toLocaleDateString('es-ES')}</td>
-                        <td className="border p-2 uppercase text-xs font-bold">{day.dayName}</td>
-                        <td className="border p-2 font-mono">{day.firstEntry}</td>
-                        <td className="border p-2 font-mono">{day.lastExit}</td>
-                        <td className="border p-2 font-bold">
+                        <td className="border border-black p-2">{new Date(day.date).toLocaleDateString('es-ES')}</td>
+                        <td className="border border-black p-2 uppercase text-[10px] font-bold">{day.dayName}</td>
+                        <td className="border border-black p-2 font-mono">{day.firstEntry}</td>
+                        <td className="border border-black p-2 font-mono">{day.lastExit}</td>
+                        <td className="border border-black p-2 font-bold">
                            {day.totalHours > 0 ? formatDecimalHours(Math.min(day.totalHours, day.contractHours)) : '-'}
                         </td>
-                        <td className="border p-2 text-gray-500 text-xs">
+                        <td className="border border-black p-2 text-gray-500">
                            {day.totalHours > day.contractHours ? formatDecimalHours(day.totalHours - day.contractHours) : '-'}
                         </td>
-                        <td className="border p-2"></td> 
+                        <td className="border border-black p-2"></td> 
                       </tr>
                     ))
                   )}
                 </tbody>
                 <tfoot>
                     <tr className="bg-gray-100 font-bold text-center">
-                      <td colSpan={4} className="border p-2 text-right px-4">TOTALES</td>
-                      <td className="border p-2">{formatDecimalHours(totalMonthlyHours)}</td>
-                      <td className="border p-2">
+                      <td colSpan={4} className="border border-black p-2 text-right px-4">TOTAL MENSUAL</td>
+                      <td className="border border-black p-2">{formatDecimalHours(totalMonthlyHours)}</td>
+                      <td className="border border-black p-2">
                         {formatDecimalHours(reportData.reduce((acc, day) => acc + (day.totalHours > day.contractHours ? day.totalHours - day.contractHours : 0), 0))}
                       </td>
-                      <td className="border p-2"></td>
+                      <td className="border border-black p-2"></td>
                     </tr>
                 </tfoot>
               </table>
 
-              <div className="legal mt-8 text-xs text-justify text-gray-500">
-                 <p>El trabajador/a declara haber recibido copia de este registro y estar conforme con las horas reflejadas.</p>
+              <div className="mt-8 text-[9px] text-justify text-gray-600 leading-tight">
+                 <p>El trabajador/a declara haber recibido copia de este registro y estar conforme con las horas reflejadas. Este documento tiene validez legal conforme a lo establecido en el Art. 34.9 del Estatuto de los Trabajadores.</p>
               </div>
 
-              <div className="footer mt-16 flex justify-between">
-                 <div className="w-[45%] border-t border-black pt-2 text-center">
-                    <p className="text-xs uppercase font-bold">Firma de la Empresa</p>
+              <div className="footer mt-12 flex justify-between">
+                 <div className="w-[40%] border-t border-black pt-2 text-center">
+                    <p className="text-[10px] uppercase font-bold">Firma de la Empresa</p>
                  </div>
-                 <div className="w-[45%] border-t border-black pt-2 text-center">
-                    <p className="text-xs uppercase font-bold">Firma del Trabajador/a</p>
+                 <div className="w-[40%] border-t border-black pt-2 text-center">
+                    <p className="text-[10px] uppercase font-bold">Firma del Trabajador/a</p>
                  </div>
               </div>
-
-            </div>
+           </div>
         </div>
       </DialogContent>
     </Dialog>
