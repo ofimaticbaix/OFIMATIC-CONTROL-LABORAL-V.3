@@ -40,24 +40,45 @@ export const WorkersView = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      // 1. Cargamos perfiles (Indispensable)
       const { data: profilesData, error: profError } = await supabase
         .from('profiles')
         .select('*')
         .order('full_name', { ascending: true });
 
-      const { data: credsData } = await supabase.from('worker_credentials').select('user_id, access_code');
-
       if (profError) throw profError;
       setProfiles(profilesData || []);
-      setWorkerCredentials(credsData || []);
-    } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Error al cargar los trabajadores' });
+
+      // 2. Cargamos credenciales (Opcional - No detiene la ejecución si falla)
+      try {
+        const { data: credsData, error: credsError } = await supabase
+          .from('worker_credentials')
+          .select('user_id, access_code');
+        
+        if (credsError) {
+          console.warn("Aviso: No se pudieron cargar las credenciales:", credsError.message);
+          setWorkerCredentials([]);
+        } else {
+          setWorkerCredentials(credsData || []);
+        }
+      } catch (innerErr) {
+        console.error("Error al acceder a worker_credentials:", innerErr);
+        setWorkerCredentials([]);
+      }
+
+    } catch (err: any) {
+      console.error("Error crítico en carga:", err);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error de carga', 
+        description: 'Hubo un problema al conectar con la base de datos de perfiles.' 
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  // --- LOGICA DE INFORMES (PLUG & PLAY) ---
+  // --- LOGICA DE INFORMES ---
 
   const generateGeneralReport = () => {
     const printWindow = window.open('', '_blank');
@@ -70,13 +91,13 @@ export const WorkersView = () => {
           <head>
             <title>Informe General - Ofimatic</title>
             <style>
-              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; color: #333; }
+              body { font-family: 'Segoe UI', sans-serif; padding: 30px; color: #333; }
               .header { border-bottom: 3px solid #2563eb; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
               .header h1 { margin: 0; color: #1e40af; font-size: 24px; text-transform: uppercase; }
-              .stats { background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+              .stats { background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; font-weight: bold; }
               table { width: 100%; border-collapse: collapse; margin-top: 10px; }
               th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; font-size: 11px; }
-              th { background-color: #f1f5f9; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+              th { background-color: #f1f5f9; color: #475569; text-transform: uppercase; }
               tr:nth-child(even) { background-color: #fcfcfc; }
               .footer { margin-top: 40px; font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }
             </style>
@@ -84,11 +105,9 @@ export const WorkersView = () => {
           <body>
             <div class="header">
               <h1>OFIMATIC - Informe de Plantilla</h1>
-              <span style="font-weight: bold;">${date}</span>
+              <span>Fecha: ${date}</span>
             </div>
-            <div class="stats">
-              <strong>Resumen Operativo:</strong> ${activeWorkers.length} trabajadores activos en el sistema.
-            </div>
+            <div class="stats">Resumen: ${activeWorkers.length} trabajadores activos.</div>
             <table>
               <thead>
                 <tr>
@@ -109,7 +128,7 @@ export const WorkersView = () => {
                 `).join('')}
               </tbody>
             </table>
-            <div class="footer">Este documento es para uso interno administrativo. Generado automáticamente por el sistema de Gestión de Trabajadores.</div>
+            <div class="footer">Documento administrativo interno. Ofimatic Control Laboral.</div>
           </body>
         </html>
       `);
@@ -150,7 +169,7 @@ export const WorkersView = () => {
     }
   };
 
-  // --- RESTO DE FUNCIONES ---
+  // --- LOGICA DE UI ---
 
   const filteredProfiles = profiles.filter(p => {
     const isActive = activeTab === 'active' ? (p.is_active !== false) : (p.is_active === false);
@@ -211,12 +230,11 @@ export const WorkersView = () => {
           <p className="text-slate-400 text-sm">Administración de plantilla y jornadas</p>
         </div>
         
-        {/* BOTONES DE ACCIÓN SUPERIOR */}
         <div className="flex gap-3">
           <Button 
             onClick={generateGeneralReport}
             variant="outline" 
-            className="border-slate-800 bg-slate-900/50 text-slate-300 hover:bg-slate-800 font-bold text-xs uppercase h-10 px-4 transition-all"
+            className="border-slate-800 bg-slate-900/50 text-slate-300 hover:bg-slate-800 font-bold text-xs uppercase h-10 px-4"
           >
             <Printer className="h-4 w-4 mr-2" /> Informe General
           </Button>
@@ -227,7 +245,6 @@ export const WorkersView = () => {
         </div>
       </div>
 
-      {/* CARDS DE ESTADÍSTICAS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-[#111] border-slate-800"><CardContent className="p-6">
           <p className="text-slate-500 text-xs font-bold uppercase">Total</p>
@@ -250,7 +267,7 @@ export const WorkersView = () => {
         </div>
         <div className="relative w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-          <Input placeholder="Buscar por nombre..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-transparent border-slate-800 pl-10 text-white text-sm focus:ring-blue-500/50" />
+          <Input placeholder="Buscar por nombre..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-transparent border-slate-800 pl-10 text-white text-sm" />
         </div>
       </div>
 
@@ -269,7 +286,7 @@ export const WorkersView = () => {
           {filteredProfiles.map(p => (
             <TableRow key={p.id} className="border-slate-800/50 hover:bg-slate-800/20 group transition-colors">
               <TableCell className="py-4 font-bold text-white text-sm">{p.full_name}</TableCell>
-              <TableCell className="py-4 text-slate-300 font-mono text-xs tracking-tighter">{p.dni || '---'}</TableCell>
+              <TableCell className="py-4 text-slate-300 font-mono text-xs">{p.dni || '---'}</TableCell>
               <TableCell className="py-4">
                 <div className="flex items-center gap-2 text-slate-400 font-mono">
                   {visibleCodes[p.id] ? (workerCredentials.find(c => c.user_id === p.id)?.access_code || '---') : '••••'}
@@ -285,7 +302,7 @@ export const WorkersView = () => {
               </TableCell>
               <TableCell className="py-4 text-slate-300 text-sm">{p.position || '---'}</TableCell>
               <TableCell className="py-4 text-right">
-                <div className="flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className="flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button 
                     onClick={() => generateWorkerReport(p)}
                     variant="outline" 
@@ -294,8 +311,8 @@ export const WorkersView = () => {
                   >
                     <FileText className="h-3.5 w-3.5 mr-2" /> Ficha
                   </Button>
-                  <button onClick={() => handleOpenDialog(p)} className="p-1.5 hover:bg-slate-800 rounded-md text-slate-400 hover:text-white transition-all"><Pencil className="h-4 w-4" /></button>
-                  <button className="p-1.5 hover:bg-red-500/10 rounded-md text-red-500/60 hover:text-red-500 transition-all"><UserX className="h-4 w-4" /></button>
+                  <button onClick={() => handleOpenDialog(p)} className="p-1.5 hover:bg-slate-800 rounded-md text-slate-400 hover:text-white"><Pencil className="h-4 w-4" /></button>
+                  <button className="p-1.5 hover:bg-red-500/10 rounded-md text-red-500/60 hover:text-red-500"><UserX className="h-4 w-4" /></button>
                 </div>
               </TableCell>
             </TableRow>
@@ -303,7 +320,6 @@ export const WorkersView = () => {
         </TableBody>
       </Table>
       
-      {/* DIALOGO DE EDICIÓN */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="bg-slate-950 text-white border-slate-800">
           <DialogHeader><DialogTitle className="uppercase font-black text-xl">Ficha Empleado</DialogTitle></DialogHeader>
