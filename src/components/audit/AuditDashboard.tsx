@@ -51,13 +51,13 @@ export const AuditDashboard = () => {
 
   useEffect(() => { loadAuditData(); }, [filter, days]);
 
-  // SOLUCIÓN AL ERROR x.toLowerCase is not a function
   const filteredLogs = logs.filter(log => {
     const searchLower = searchTerm.toLowerCase();
-    
-    // Aseguramos que los valores existan y sean strings antes de llamar a toLowerCase()
     const action = String(log.action || "").toLowerCase();
-    const details = String(log.details || "").toLowerCase();
+    // Convertimos detalles a string para la búsqueda segura
+    const details = typeof log.details === 'object' 
+      ? JSON.stringify(log.details).toLowerCase() 
+      : String(log.details || "").toLowerCase();
     
     return action.includes(searchLower) || details.includes(searchLower);
   });
@@ -65,7 +65,7 @@ export const AuditDashboard = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-20 gap-4">
       <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-      <p className="text-slate-500 font-bold uppercase text-xs tracking-widest text-center">Leyendo Registros de Seguridad...</p>
+      <p className="text-slate-500 font-bold uppercase text-xs tracking-widest text-center">Analizando Seguridad...</p>
     </div>
   );
 
@@ -74,69 +74,64 @@ export const AuditDashboard = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2 text-white uppercase tracking-tighter">
-            <Shield className="h-6 w-6 text-blue-500" /> Auditoría y Seguridad
+            <Shield className="h-6 w-6 text-blue-500" /> Auditoría
           </h2>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Registro Normativo RD-LEY 8/2019</p>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Registro Inmutable OFIMATIC</p>
         </div>
         <Button onClick={loadAuditData} variant="outline" className="bg-slate-900 border-slate-800 text-white font-bold text-xs uppercase h-10 px-6">
-           <RefreshCw className="h-4 w-4 mr-2" /> Sincronizar Logs
+           <RefreshCw className="h-4 w-4 mr-2" /> Actualizar
         </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-slate-900 border-slate-800 text-white">
-          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Eventos Totales</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-black">{filteredLogs.length}</div></CardContent>
+        <Card className="bg-slate-900 border-slate-800 text-white shadow-xl">
+          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">Eventos</CardTitle></CardHeader>
+          <CardContent className="text-center font-black text-3xl">{filteredLogs.length}</CardContent>
         </Card>
-        <Card className="bg-slate-900 border-slate-800 text-white">
-          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Modificaciones</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-black">{filteredLogs.filter(l => String(l.action).includes('UPDATE')).length}</div></CardContent>
+        <Card className="bg-slate-900 border-slate-800 text-white shadow-xl">
+          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase text-blue-500 tracking-widest text-center">Cambios</CardTitle></CardHeader>
+          <CardContent className="text-center font-black text-3xl">{filteredLogs.filter(l => String(l.action).includes('UPDATE')).length}</CardContent>
         </Card>
-        <Card className="bg-slate-900 border-slate-800 text-white">
-          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase text-red-500 tracking-widest">Eliminaciones</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-black text-red-500">{filteredLogs.filter(l => String(l.action).includes('DELETE')).length}</div></CardContent>
+        <Card className="bg-slate-900 border-slate-800 text-white shadow-xl border-red-900/30">
+          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-black uppercase text-red-500 tracking-widest text-center">Alertas</CardTitle></CardHeader>
+          <CardContent className="text-center font-black text-3xl text-red-500">{filteredLogs.filter(l => String(l.action).includes('DELETE')).length}</CardContent>
         </Card>
       </div>
 
-      <Card className="bg-slate-900 border-slate-800 overflow-hidden shadow-2xl">
-        <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex gap-4">
-           <div className="relative flex-1">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-             <Input 
-               placeholder="Filtrar por acción o detalle..." 
-               value={searchTerm} 
-               onChange={(e) => setSearchTerm(e.target.value)} 
-               className="bg-slate-900 border-slate-800 text-white pl-10" 
-             />
-           </div>
-           <Select value={days} onValueChange={setDays}>
-            <SelectTrigger className="w-40 bg-slate-900 border-slate-800 text-white"><SelectValue /></SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-800 text-white font-bold uppercase text-[10px]">
-              <SelectItem value="7">7 días</SelectItem>
-              <SelectItem value="30">30 días</SelectItem>
-            </SelectContent>
-          </Select>
+      <Card className="bg-slate-900 border-slate-800 overflow-hidden">
+        <div className="p-4 bg-slate-950/30 border-b border-slate-800">
+          <Input 
+            placeholder="Buscar en el registro histórico..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            className="bg-slate-900 border-slate-800 text-white text-xs h-10"
+          />
         </div>
         <Table>
           <TableHeader className="bg-slate-950">
             <TableRow className="border-slate-800">
               <TableHead className="text-slate-500 font-bold uppercase text-[10px] p-4">Fecha / Hora</TableHead>
               <TableHead className="text-slate-500 font-bold uppercase text-[10px] p-4">Acción</TableHead>
-              <TableHead className="text-slate-500 font-bold uppercase text-[10px] p-4">Detalles del Cambio</TableHead>
+              <TableHead className="text-slate-500 font-bold uppercase text-[10px] p-4">Detalle del Cambio</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredLogs.length === 0 ? (
-              <TableRow className="border-slate-800 hover:bg-transparent">
-                <TableCell colSpan={3} className="p-12 text-center text-slate-500 font-bold uppercase text-xs italic tracking-widest">No se encontraron registros con los filtros actuales.</TableCell>
-              </TableRow>
-            ) : filteredLogs.map((log) => (
+            {filteredLogs.map((log) => (
               <TableRow key={log.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
-                <TableCell className="p-4 font-mono text-[10px] text-slate-400">{new Date(log.created_at).toLocaleString('es-ES')}</TableCell>
-                <TableCell className="p-4">
-                  <Badge variant="outline" className="text-[9px] font-black uppercase border-slate-700 bg-slate-950">{String(log.action)}</Badge>
+                <TableCell className="p-4 font-mono text-[10px] text-slate-400">
+                  {new Date(log.created_at).toLocaleString()}
                 </TableCell>
-                <TableCell className="p-4 text-[11px] text-slate-300 max-w-md truncate" title={log.details}>{log.details}</TableCell>
+                <TableCell className="p-4">
+                  <Badge variant="outline" className="text-[9px] font-black uppercase border-slate-700 bg-slate-950">
+                    {String(log.action)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="p-4 text-[11px] text-slate-300">
+                  {/* SOLUCIÓN AL ERROR #31: Convertimos objetos a string */}
+                  {typeof log.details === 'object' 
+                    ? JSON.stringify(log.details) 
+                    : String(log.details || "Sin detalles")}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
