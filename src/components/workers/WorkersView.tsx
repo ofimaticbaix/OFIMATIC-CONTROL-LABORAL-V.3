@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { 
   Plus, Pencil, Trash2, UserX, Search, Eye, EyeOff, Save, 
-  Shield, BadgeCheck, Briefcase, Hash, Loader2, Mail, Clock, Calendar
+  Shield, BadgeCheck, Briefcase, Hash, Loader2, Mail, Clock, RefreshCw
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -29,9 +30,11 @@ export const WorkersView = () => {
   const [isCustomSchedule, setIsCustomSchedule] = useState(false);
 
   const [formData, setFormData] = useState({
+    password: '',
     fullName: '',
     dni: '',
     position: '',
+    role: 'worker',
     dailyHours: '8',
     work_schedule: {
       monday: { active: true, start: "09:00", end: "17:00", totalHours: 8 },
@@ -85,12 +88,26 @@ export const WorkersView = () => {
       setEditingProfile(profile);
       setIsCustomSchedule(!!profile.work_schedule);
       setFormData({
-        ...formData,
+        password: '',
         fullName: profile.full_name,
         dni: profile.dni || '',
         position: profile.position || '',
+        role: profile.role || 'worker',
         dailyHours: profile.daily_hours ? String(profile.daily_hours) : '8',
         work_schedule: profile.work_schedule || formData.work_schedule
+      });
+    } else {
+      setEditingProfile(null);
+      setIsCustomSchedule(false);
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      setFormData({
+        ...formData,
+        password: code,
+        fullName: '',
+        dni: '',
+        position: '',
+        role: 'worker',
+        dailyHours: '8'
       });
     }
     setIsDialogOpen(true);
@@ -98,18 +115,54 @@ export const WorkersView = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('profiles').update({
-      full_name: formData.fullName,
-      dni: formData.dni,
-      position: formData.position,
-      daily_hours: parseFloat(formData.dailyHours) || 8,
-      work_schedule: isCustomSchedule ? formData.work_schedule : null
-    }).eq('id', editingProfile.id);
+    const finalSchedule = isCustomSchedule ? formData.work_schedule : null;
 
-    if (error) return toast({ variant: 'destructive', title: 'Error' });
-    toast({ title: 'Actualizado' });
+    if (editingProfile) {
+      const { error } = await supabase.from('profiles').update({
+        full_name: formData.fullName,
+        dni: formData.dni,
+        position: formData.position,
+        daily_hours: parseFloat(formData.dailyHours) || 8,
+        work_schedule: finalSchedule
+      }).eq('id', editingProfile.id);
+
+      if (error) return toast({ variant: 'destructive', title: 'Error al actualizar' });
+      toast({ title: 'Actualizado correctamente' });
+    } else {
+      const internalEmail = `${formData.dni.toLowerCase()}@ofimatic.com`;
+      const authPass = `worker_${formData.password}_${formData.dni}`;
+      
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: internalEmail,
+        password: authPass,
+        options: { data: { full_name: formData.fullName, role: formData.role } }
+      });
+
+      if (signUpError) return toast({ variant: 'destructive', title: 'Error', description: signUpError.message });
+
+      if (data.user) {
+        await supabase.from('profiles').update({ 
+          dni: formData.dni, 
+          position: formData.position, 
+          daily_hours: parseFloat(formData.dailyHours) || 8,
+          work_schedule: finalSchedule 
+        }).eq('id', data.user.id);
+
+        if (formData.role === 'worker') {
+          await supabase.from('worker_credentials').insert({ user_id: data.user.id, access_code: formData.password });
+        }
+      }
+      toast({ title: 'Trabajador creado' });
+    }
     loadData();
     setIsDialogOpen(false);
+  };
+
+  const handleDeactivate = async (id: string) => {
+    const { error } = await supabase.from('profiles').update({ is_active: false }).eq('id', id);
+    if (error) return toast({ variant: 'destructive', title: 'Error' });
+    toast({ title: 'Trabajador desactivado' });
+    loadData();
   };
 
   const toggleCodeVisibility = (userId: string) => setVisibleCodes(prev => ({ ...prev, [userId]: !prev[userId] }));
@@ -117,7 +170,7 @@ export const WorkersView = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4">
       <Loader2 className="animate-spin h-10 w-10 text-blue-500" />
-      <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Cargando Trabajadores...</p>
+      <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Sincronizando Plantilla...</p>
     </div>
   );
 
@@ -125,8 +178,8 @@ export const WorkersView = () => {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black uppercase tracking-tighter text-white">Gestión de Trabajadores</h2>
-          <p className="text-slate-400 text-sm">Panel integral de plantilla y control de contratos.</p>
+          <h2 className="text-3xl font-black uppercase tracking-tighter text-white italic">Trabajadores</h2>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Gestión de Horarios y Contratos</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative w-full md:w-64">
@@ -138,142 +191,134 @@ export const WorkersView = () => {
               className="pl-10 bg-slate-900 border-slate-800 text-white"
             />
           </div>
+          {/* BOTÓN DE ALTA RESTAURADO */}
+          <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-black uppercase text-xs tracking-widest h-10 px-6">
+            <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
+          </Button>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v:any) => setActiveTab(v)} className="w-full">
-        <TabsList className="bg-slate-900 border border-slate-800 p-1">
-          <TabsTrigger value="active" className="text-xs font-bold uppercase tracking-widest px-8">Activos</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={(v:any) => setActiveTab(v)}>
+        <TabsList className="bg-slate-900 border border-slate-800">
+          <TabsTrigger value="active" className="text-xs font-bold uppercase tracking-widest px-8">Personal Activo</TabsTrigger>
           <TabsTrigger value="deactivated" className="text-xs font-bold uppercase tracking-widest px-8">Bajas</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="mt-4">
-          <Card className="bg-slate-900 border-slate-800 shadow-2xl overflow-hidden">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-slate-950">
-                  <TableRow className="border-slate-800 hover:bg-transparent">
-                    <TableHead className="text-slate-500 font-black uppercase text-[10px] tracking-widest p-4">Empleado</TableHead>
-                    <TableHead className="text-slate-500 font-black uppercase text-[10px] tracking-widest p-4 text-center">Clave Acceso</TableHead>
-                    <TableHead className="text-slate-500 font-black uppercase text-[10px] tracking-widest p-4">Cargo</TableHead>
-                    <TableHead className="text-slate-500 font-black uppercase text-[10px] tracking-widest p-4">Tipo Jornada</TableHead>
-                    <TableHead className="text-slate-500 font-black uppercase text-[10px] tracking-widest p-4 text-right">Acciones</TableHead>
+        <Card className="bg-slate-900 border-slate-800 mt-4 overflow-hidden">
+          <Table>
+            <TableHeader className="bg-slate-950">
+              <TableRow className="border-slate-800">
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Empleado / DNI</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN Fichaje</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Jornada Laboral</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredProfiles.map(p => {
+                const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code;
+                return (
+                  <TableRow key={p.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
+                    <TableCell className="p-4">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-100">{p.full_name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono tracking-tighter">{p.dni || 'SIN DNI'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="bg-slate-950 px-3 py-1 rounded border border-slate-800">
+                          <span className="font-mono font-black text-blue-400 text-sm tracking-widest">
+                            {visibleCodes[p.id] ? pin : '****'}
+                          </span>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleCodeVisibility(p.id)}>
+                          {visibleCodes[p.id] ? <EyeOff className="h-3 w-3 text-slate-500" /> : <Eye className="h-3 w-3 text-slate-500" />}
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="p-4">
+                      {p.work_schedule ? (
+                        <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[9px] font-black uppercase tracking-widest">Variable Semanal</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest">{p.daily_hours || 8}h Diarias</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="p-4 text-right flex justify-end gap-2">
+                      <MonthlyReportDialog profile={p} />
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)} className="text-blue-500 hover:bg-blue-500/10"><Pencil className="h-4 w-4" /></Button>
+                      
+                      {/* BOTÓN DE ELIMINAR/DESACTIVAR RESTAURADO */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="bg-slate-950 border-slate-800 text-white">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="uppercase font-black tracking-tighter">¿Desactivar Trabajador?</AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-400">Esta acción moverá a {p.full_name} a la lista de bajas. No podrá realizar fichajes.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="bg-slate-900 border-slate-800">Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeactivate(p.id)} className="bg-red-600 hover:bg-red-700">Confirmar Baja</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProfiles.map(p => {
-                    const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code;
-                    return (
-                      <TableRow key={p.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
-                        <TableCell className="p-4">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-100">{p.full_name}</span>
-                            <span className="text-[10px] text-slate-500">{p.dni || 'DNI pendiente'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <div className="bg-slate-950 px-3 py-1 rounded border border-slate-800">
-                              <span className="font-mono font-bold text-blue-400 text-sm tracking-widest">
-                                {visibleCodes[p.id] ? pin : '****'}
-                              </span>
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleCodeVisibility(p.id)}>
-                              {visibleCodes[p.id] ? <EyeOff className="h-3 w-3 text-slate-500" /> : <Eye className="h-3 w-3 text-slate-500" />}
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell className="p-4">
-                          <Badge variant="outline" className="border-slate-700 text-slate-400 text-[10px] font-bold uppercase">
-                            <Briefcase className="h-3 w-3 mr-2" /> {p.position || 'General'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="p-4">
-                          {p.work_schedule ? (
-                            <Badge className="bg-blue-600/10 text-blue-400 border-blue-600/20 text-[9px] font-black uppercase">Personalizada</Badge>
-                          ) : (
-                            <div className="flex flex-col">
-                              <Badge variant="secondary" className="text-[9px] font-black uppercase w-fit">Fija</Badge>
-                              <span className="text-[9px] text-slate-500 font-bold">{p.daily_hours || 8}h / día</span>
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="p-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            <MonthlyReportDialog profile={p} />
-                            <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)} className="text-blue-500 hover:bg-blue-500/10 border border-slate-800/50">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
       </Tabs>
 
+      {/* MODAL DE EDICIÓN / ALTA */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl bg-slate-950 text-white border-slate-800 shadow-2xl">
           <DialogHeader className="border-b border-slate-900 pb-4 mb-4">
             <DialogTitle className="uppercase font-black text-xl tracking-tighter flex items-center gap-2">
-              <Pencil className="text-blue-500 h-5 w-5" /> Configurar Trabajador
+              {editingProfile ? <Pencil className="text-blue-500" /> : <Plus className="text-emerald-500" />} 
+              {editingProfile ? 'Editar' : 'Nuevo'} Trabajador
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Nombre Completo</Label>
-                <Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-slate-900 border-slate-800" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Cargo</Label>
-                <Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-slate-900 border-slate-800" />
-              </div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">DNI/NIE</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-slate-900 border-slate-800" disabled={!!editingProfile} /></div>
             </div>
 
             <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800">
-              <Label className="text-[10px] uppercase font-bold text-slate-500 mb-4 block flex items-center gap-2">
-                <Clock className="h-3 w-3 text-blue-400" /> Horario por Contrato
-              </Label>
+              <Label className="text-[10px] uppercase font-bold text-slate-500 mb-4 block flex items-center gap-2"><Clock className="h-3 w-3 text-blue-400" /> Configuración de Contrato</Label>
               <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 mb-6">
-                <Button type="button" variant={!isCustomSchedule ? "default" : "ghost"} className={`flex-1 text-[10px] font-black h-9 ${!isCustomSchedule ? 'bg-slate-800 text-white' : 'text-slate-600'}`} onClick={() => setIsCustomSchedule(false)}>FIJO (8H)</Button>
-                <Button type="button" variant={isCustomSchedule ? "default" : "ghost"} className={`flex-1 text-[10px] font-black h-9 ${isCustomSchedule ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-600'}`} onClick={() => setIsCustomSchedule(true)}>PERSONALIZADO</Button>
+                <Button type="button" variant={!isCustomSchedule ? "default" : "ghost"} className={`flex-1 text-[10px] font-black h-9 rounded-lg ${!isCustomSchedule ? 'bg-slate-800' : 'text-slate-600'}`} onClick={() => setIsCustomSchedule(false)}>Fijo (8H)</Button>
+                <Button type="button" variant={isCustomSchedule ? "default" : "ghost"} className={`flex-1 text-[10px] font-black h-9 rounded-lg ${isCustomSchedule ? 'bg-blue-600 shadow-lg' : 'text-slate-600'}`} onClick={() => setIsCustomSchedule(true)}>Personalizado</Button>
               </div>
 
               {isCustomSchedule ? (
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-2">
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-2">
                   {Object.entries(formData.work_schedule).map(([day, config]: any) => (
                     <div key={day} className="flex items-center justify-between text-[11px] bg-slate-950/40 p-2 rounded-lg border border-slate-800/50">
                       <div className="flex items-center gap-3 w-28">
-                        <Checkbox checked={config.active} onCheckedChange={(v) => handleDayChange(day, 'active', v)} className="border-slate-700" />
-                        <span className={`font-black uppercase ${config.active ? 'text-white' : 'text-slate-600'}`}>{day}</span>
+                        <Checkbox checked={config.active} onCheckedChange={(v) => handleDayChange(day, 'active', v)} />
+                        <span className={`font-black uppercase tracking-widest ${config.active ? 'text-white' : 'text-slate-600'}`}>{day}</span>
                       </div>
                       {config.active ? (
                         <div className="flex items-center gap-2">
                           <Input type="time" value={config.start} onChange={e => handleDayChange(day, 'start', e.target.value)} className="h-8 w-24 bg-slate-950 border-slate-800 text-[10px]" />
-                          <span className="text-slate-600 font-bold uppercase text-[9px]">A</span>
+                          <span className="text-slate-600 font-bold text-[9px]">A</span>
                           <Input type="time" value={config.end} onChange={e => handleDayChange(day, 'end', e.target.value)} className="h-8 w-24 bg-slate-950 border-slate-800 text-[10px]" />
                         </div>
-                      ) : <span className="text-slate-700 italic text-[10px] uppercase">No laborable</span>}
+                      ) : <span className="text-slate-700 italic text-[10px] uppercase">Descanso</span>}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <Label className="text-[10px] text-slate-500 font-bold uppercase">Meta diaria</Label>
-                  <Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-slate-950 border-slate-800" />
-                </div>
+                <div className="space-y-2"><Label className="text-[10px] text-slate-500 font-bold uppercase">Meta diaria horas</Label><Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-slate-950 border-slate-800" /></div>
               )}
             </div>
-            <DialogFooter>
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 shadow-xl text-xs font-black uppercase h-11">
-                <Save className="h-4 w-4 mr-2" /> Guardar Cambios
-              </Button>
-            </DialogFooter>
+            
+            <DialogFooter><Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 font-black uppercase h-11"><Save className="h-4 w-4 mr-2" /> Guardar Trabajador</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
