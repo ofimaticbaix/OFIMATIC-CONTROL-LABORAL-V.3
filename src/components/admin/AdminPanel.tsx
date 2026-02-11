@@ -195,4 +195,22 @@ const EditWorkerModal = ({ worker, onUpdate }: any) => {
                   <Checkbox checked={formData.work_schedule[d.id].active} onCheckedChange={(v) => handleDayChange(d.id, 'active', v)} />
                   <span className={`font-black uppercase text-[10px] ${formData.work_schedule[d.id].active ? 'text-white' : 'text-slate-600'}`}>{d.label}</span>
                 </div>
-                {formData.
+                {formData.work_schedule[d.id].active ? (
+                  <div className="flex items-center gap-2">
+                    <Input type="time" value={formData.work_schedule[d.id].start} onChange={e => handleDayChange(d.id, 'start', e.target.value)} className="h-8 w-24 bg-slate-900 border-slate-800 text-center text-[10px] text-white" />
+                    <span className="text-slate-600">a</span>
+                    <Input type="time" value={formData.work_schedule[d.id].end} onChange={e => handleDayChange(d.id, 'end', e.target.value)} className="h-8 w-24 bg-slate-900 border-slate-800 text-center text-[10px] text-white" />
+                  </div>
+                ) : <span className="text-slate-700 italic text-[10px] font-black uppercase tracking-widest">Descanso</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end gap-3 mt-6">
+          <Button variant="ghost" onClick={() => setOpen(false)} className="text-slate-500 font-bold uppercase text-[10px]">Cancelar</Button>
+          <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 font-black uppercase text-[10px] px-8"><Save className="h-3 w-3 mr-2" /> Guardar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
