@@ -1,15 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { FileText, Printer, X, Calendar, Download } from 'lucide-react';
+import { FileText, X, Calendar, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Profile, WeeklySchedule } from '@/types';
+import { Profile } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
+
+interface WeeklySchedule {
+  monday: { active: boolean; totalHours: number };
+  tuesday: { active: boolean; totalHours: number };
+  wednesday: { active: boolean; totalHours: number };
+  thursday: { active: boolean; totalHours: number };
+  friday: { active: boolean; totalHours: number };
+  saturday: { active: boolean; totalHours: number };
+  sunday: { active: boolean; totalHours: number };
+}
 
 interface ExtendedProfile extends Profile {
   daily_hours?: number;
+  weekly_hours?: number;
   work_schedule?: WeeklySchedule | null;
 }
 
@@ -39,33 +48,22 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
   };
 
   const getExpectedHoursForDate = (date: Date): number => {
-    // 1. Si no hay horario personalizado, usamos el fijo
-    if (!profile.work_schedule) {
-        const day = date.getDay();
-        if (day === 0 || day === 6) return 0; // Fines de semana 0h
-        return profile.daily_hours || 8;
+    if (profile.work_schedule) {
+        const dayIndex = date.getDay();
+        const keys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayKey = keys[dayIndex];
+        const daySchedule = (profile.work_schedule as any)[dayKey];
+        return daySchedule?.active ? daySchedule.totalHours : 0;
     }
-
-    // 2. Si HAY horario personalizado
-    const dayIndex = date.getDay();
-    // Forzamos a TS a saber que existe con el signo !
-    const schedule = profile.work_schedule!; 
-    
-    // Usamos claves genéricas para evitar errores de tipado estricto
-    const keys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayKey = keys[dayIndex];
-    
-    // Accedemos como 'any' para evitar que TS se queje si las claves no coinciden perfecto
-    const daySchedule = (schedule as any)[dayKey];
-
-    return daySchedule?.active ? daySchedule.totalHours : 0;
+    const day = date.getDay();
+    if (day === 0 || day === 6) return 0;
+    if (profile.weekly_hours) return profile.weekly_hours / 5;
+    return profile.daily_hours || 8;
   };
 
   const generateReport = async () => {
     setLoading(true);
     const [year, month] = selectedMonth.split('-');
-    
-    // Calcular fechas inicio y fin
     const startDate = `${year}-${month}-01`;
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
     const endDate = `${year}-${month}-${lastDay}`;
@@ -76,7 +74,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
       .eq('user_id', profile.id)
       .gte('date', startDate)
       .lte('date', endDate)
-      .order('created_at', { ascending: true });
+      .order('date', { ascending: true });
 
     if (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos.' });
@@ -90,7 +88,6 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     for (let day = 1; day <= lastDay; day++) {
       const currentDayStr = `${year}-${month}-${day.toString().padStart(2, '0')}`;
       const dayEntries = entries?.filter(e => e.date === currentDayStr) || [];
-
       let dayTotalHours = 0;
       let firstEntry = '-';
       let lastExit = '-';
@@ -103,16 +100,12 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
         if (lastEntry.clock_out) {
             lastExit = new Date(lastEntry.clock_out).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
         }
-        dayEntries.forEach(e => {
-            if (e.hours_worked) dayTotalHours += e.hours_worked;
-        });
+        dayEntries.forEach(e => { if (e.hours_worked) dayTotalHours += e.hours_worked; });
       }
 
       monthlyTotal += dayTotalHours;
-
       const dateObj = new Date(parseInt(year), parseInt(month) - 1, day);
       const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-      
       const dailyContractHours = getExpectedHoursForDate(dateObj);
 
       processedDays.push({
@@ -122,7 +115,6 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
         firstEntry,
         lastExit,
         totalHours: dayTotalHours,
-        entriesCount: dayEntries.length,
         isWeekend,
         contractHours: dailyContractHours
       });
@@ -133,32 +125,36 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     setLoading(false);
   };
 
-  const handleDownloadPDF = () => {
-    const element = printRef.current;
-    if (!element) return;
+  // Función de impresión nativa sin librerías externas para evitar errores de Vercel
+  const handlePrint = () => {
+    const content = printRef.current;
+    if (!content) return;
 
-    // Configuración del PDF
-    const opt = {
-      margin:       10,
-      filename:     `Informe_${profile.full_name}_${selectedMonth}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true }, // useCORS ayuda si hay imágenes externas
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    // Llamada segura a la librería
-    if (html2pdf) {
-        html2pdf().set(opt).from(element).save().catch((err: any) => {
-            console.error("Error al generar PDF:", err);
-            toast({ variant: "destructive", title: "Error", description: "Fallo al generar el PDF" });
-        });
-        
-        toast({
-            title: "PDF Generado",
-            description: "El informe se ha descargado correctamente."
-        });
-    } else {
-        toast({ variant: "destructive", title: "Error", description: "Librería PDF no cargada" });
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Informe - ${profile.full_name}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10px; }
+              th, td { border: 1px solid #000; padding: 6px; text-align: center; }
+              th { background-color: #f3f4f6; }
+              .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+              .info-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; border: 1px solid #000; padding: 15px; margin-bottom: 20px; }
+              .footer { margin-top: 40px; display: flex; justify-content: space-between; }
+              .signature { width: 40%; border-top: 1px solid #000; text-align: center; padding-top: 5px; font-weight: bold; font-size: 10px; }
+              @media print { .no-print { display: none; } }
+            </style>
+          </head>
+          <body>${content.innerHTML}</body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
     }
   };
 
@@ -166,120 +162,105 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <FileText className="h-4 w-4" />
-          Informe
+          <FileText className="h-4 w-4" /> Informe
         </Button>
       </DialogTrigger>
       
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0 bg-white text-black">
         <div className="p-4 border-b flex justify-between items-center bg-gray-50">
           <div className="flex items-center gap-4">
-             <h3 className="font-bold text-lg">Vista Previa del Informe</h3>
-             <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-gray-500" />
-                <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border rounded p-1 text-sm" />
-             </div>
+             <h3 className="font-bold text-lg text-black">Vista Previa del Informe</h3>
+             <input 
+               type="month" 
+               value={selectedMonth} 
+               onChange={(e) => setSelectedMonth(e.target.value)} 
+               className="border rounded p-1 text-sm bg-white text-black" 
+             />
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleDownloadPDF} className="gap-2 bg-blue-600 hover:bg-blue-700">
-              <Download className="h-4 w-4" /> Descargar PDF
+            <Button onClick={handlePrint} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+              <Printer className="h-4 w-4" /> Imprimir / PDF
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-black hover:bg-gray-200">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-8 bg-gray-100">
-           <div id="report-content" ref={printRef} className="bg-white shadow-lg p-10 max-w-[21cm] mx-auto min-h-[29.7cm] text-black">
-              
-              <div className="header border-b-2 border-black pb-4 mb-6">
-                 <div className="flex justify-between items-end">
+        <div className="flex-1 overflow-auto p-8 bg-gray-200">
+            <div ref={printRef} className="bg-white shadow-lg p-10 max-w-[21cm] mx-auto min-h-[29.7cm] text-black text-left">
+              <div className="header">
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                     <div>
-                      <h1 className="text-xl font-bold uppercase">Registro de Jornada Laboral</h1>
-                      <p className="text-xs mt-1 text-gray-500">Conforme al Art. 34.9 del Estatuto de los Trabajadores</p>
+                      <h1 style={{ fontSize: '20px', margin: 0 }}>REGISTRO DE JORNADA LABORAL</h1>
+                      <p style={{ fontSize: '10px', color: '#666', marginTop: '5px' }}>Art. 34.9 del Estatuto de los Trabajadores</p>
                     </div>
-                    <div className="text-right">
-                      <h2 className="text-xl font-bold">{selectedMonth}</h2>
-                    </div>
+                    <h2 style={{ fontSize: '20px', margin: 0 }}>{selectedMonth}</h2>
                  </div>
 
-                 <div className="info-grid grid grid-cols-2 gap-8 mt-6 border p-4 rounded-sm">
+                 <div className="info-grid" style={{ marginTop: '20px' }}>
                     <div>
-                        <p className="text-xs uppercase text-gray-500 font-bold">Empresa</p>
-                        <p className="font-bold text-lg">AN STILE UNISEX S.L.</p> 
-                        <p className="text-sm">DNI: 47611686-F</p> 
+                        <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#666', textTransform: 'uppercase', margin: 0 }}>Empresa</p>
+                        <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '5px 0' }}>OFIMATIC BAIX S.L.</p> 
+                        <p style={{ fontSize: '12px', margin: 0 }}>NIF: B-65836512</p> 
                     </div>
                     <div>
-                        <p className="text-xs uppercase text-gray-500 font-bold">Trabajador/a</p>
-                        <p className="font-bold uppercase text-lg">{profile.full_name}</p>
-                        <p className="text-sm">DNI/NIE: {profile.dni || 'PENDIENTE'}</p>
-                        <p className="text-sm">Puesto: {profile.position || 'General'}</p>
-                        <p className="text-sm mt-1">
-                            Jornada: <strong>
-                                {profile.work_schedule ? 'Según Cuadrante' : `${profile.daily_hours || 8}h / día`}
-                            </strong>
-                        </p>
+                        <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#666', textTransform: 'uppercase', margin: 0 }}>Trabajador/a</p>
+                        <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '5px 0', textTransform: 'uppercase' }}>{profile.full_name}</p>
+                        <p style={{ fontSize: '12px', margin: 0 }}>DNI/NIE: {profile.dni || '---'}</p>
                     </div>
                  </div>
               </div>
 
-              <table className="w-full border-collapse text-sm">
+              <table>
                 <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-2 w-24">Fecha</th>
-                    <th className="border p-2 w-16">Día</th>
-                    <th className="border p-2">Entrada</th>
-                    <th className="border p-2">Salida</th>
-                    <th className="border p-2">Ordinarias</th>
-                    <th className="border p-2">Extras</th>
-                    <th className="border p-2">Firma</th>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Día</th>
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th>Ordinarias</th>
+                    <th>Extras</th>
+                    <th style={{ width: '80px' }}>Firma</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={7} className="py-10 text-center">Generando informe...</td></tr>
+                    <tr><td colSpan={7} style={{ padding: '40px' }}>Cargando datos...</td></tr>
                   ) : (
                     reportData.map((day) => (
-                      <tr key={day.date} className={`text-center ${day.isWeekend ? 'bg-gray-50' : ''}`}>
-                        <td className="border p-2">{new Date(day.date).toLocaleDateString('es-ES')}</td>
-                        <td className="border p-2 uppercase text-xs font-bold">{day.dayName}</td>
-                        <td className="border p-2 font-mono">{day.firstEntry}</td>
-                        <td className="border p-2 font-mono">{day.lastExit}</td>
-                        <td className="border p-2 font-bold">
+                      <tr key={day.date} style={{ backgroundColor: day.isWeekend ? '#f9fafb' : 'transparent' }}>
+                        <td>{new Date(day.date).toLocaleDateString('es-ES')}</td>
+                        <td style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '9px' }}>{day.dayName}</td>
+                        <td style={{ fontFamily: 'monospace' }}>{day.firstEntry}</td>
+                        <td style={{ fontFamily: 'monospace' }}>{day.lastExit}</td>
+                        <td style={{ fontWeight: 'bold' }}>
                            {day.totalHours > 0 ? formatDecimalHours(Math.min(day.totalHours, day.contractHours)) : '-'}
                         </td>
-                        <td className="border p-2 text-gray-500 text-xs">
+                        <td style={{ color: '#666' }}>
                            {day.totalHours > day.contractHours ? formatDecimalHours(day.totalHours - day.contractHours) : '-'}
                         </td>
-                        <td className="border p-2"></td> 
+                        <td></td> 
                       </tr>
                     ))
                   )}
                 </tbody>
                 <tfoot>
-                    <tr className="bg-gray-100 font-bold text-center">
-                      <td colSpan={4} className="border p-2 text-right px-4">TOTALES</td>
-                      <td className="border p-2">{formatDecimalHours(totalMonthlyHours)}</td>
-                      <td className="border p-2">
+                    <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
+                      <td colSpan={4} style={{ textAlign: 'right', paddingRight: '15px' }}>TOTAL MENSUAL</td>
+                      <td>{formatDecimalHours(totalMonthlyHours)}</td>
+                      <td>
                         {formatDecimalHours(reportData.reduce((acc, day) => acc + (day.totalHours > day.contractHours ? day.totalHours - day.contractHours : 0), 0))}
                       </td>
-                      <td className="border p-2"></td>
+                      <td></td>
                     </tr>
                 </tfoot>
               </table>
 
-              <div className="legal mt-8 text-xs text-justify text-gray-500">
-                 <p>El trabajador/a declara haber recibido copia de este registro y estar conforme con las horas reflejadas.</p>
+              <div className="footer">
+                 <div className="signature">Firma Empresa</div>
+                 <div className="signature">Firma Trabajador/a</div>
               </div>
-
-              <div className="footer mt-16 flex justify-between">
-                 <div className="w-[45%] border-t border-black pt-2 text-center">
-                    <p className="text-xs uppercase font-bold">Firma de la Empresa</p>
-                 </div>
-                 <div className="w-[45%] border-t border-black pt-2 text-center">
-                    <p className="text-xs uppercase font-bold">Firma del Trabajador/a</p>
-                 </div>
-              </div>
-
             </div>
         </div>
       </DialogContent>
