@@ -8,7 +8,6 @@ import { useToast } from '@/hooks/use-toast';
 
 interface ExtendedProfile extends Profile {
   daily_hours?: number;
-  weekly_hours?: number;
   work_schedule?: any;
 }
 
@@ -21,8 +20,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); 
   const [reportData, setReportData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [totalMonthlyHours, setTotalMonthlyHours] = useState(0);
-  const [totalExtras, setTotalExtras] = useState(0);
+  const [totals, setTotals] = useState({ ordinarias: 0, extras: 0 });
   const printRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -32,7 +30,8 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     }
   }, [isOpen, selectedMonth, profile]);
 
-  const formatDecimalHours = (decimal: number) => {
+  const formatDecimalToTime = (decimal: number) => {
+    if (decimal <= 0) return "0h 00m";
     const hours = Math.floor(decimal);
     const minutes = Math.round((decimal - hours) * 60);
     return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
@@ -54,55 +53,50 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
       .order('date', { ascending: true });
 
     if (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos.' });
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los registros.' });
       setLoading(false);
       return;
     }
 
     const processedDays = [];
-    let monthlyTotal = 0;
-    let extrasTotal = 0;
+    let totalOrd = 0;
+    let totalExt = 0;
 
     for (let day = 1; day <= lastDay; day++) {
       const currentDayStr = `${year}-${month}-${day.toString().padStart(2, '0')}`;
       const dayEntries = entries?.filter(e => e.date === currentDayStr) || [];
       
-      let dayTotalHours = 0;
-      let firstEntry = '-';
-      let lastExit = '-';
+      let dayTotal = 0;
+      let entrada = "";
+      let salida = "";
 
       if (dayEntries.length > 0) {
-        if (dayEntries[0].clock_in) {
-            firstEntry = new Date(dayEntries[0].clock_in).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        }
-        const lastEntry = dayEntries[dayEntries.length - 1];
-        if (lastEntry.clock_out) {
-            lastExit = new Date(lastEntry.clock_out).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        }
-        dayEntries.forEach(e => { if (e.hours_worked) dayTotalHours += e.hours_worked; });
+        if (dayEntries[0].clock_in) entrada = new Date(dayEntries[0].clock_in).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        const last = dayEntries[dayEntries.length - 1];
+        if (last.clock_out) salida = new Date(last.clock_out).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        dayEntries.forEach(e => { if (e.hours_worked) dayTotal += e.hours_worked; });
       }
 
       const dateObj = new Date(parseInt(year), parseInt(month) - 1, day);
-      const dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase();
       const contractHours = profile.daily_hours || 8;
-      const extras = dayTotalHours > contractHours ? dayTotalHours - contractHours : 0;
+      const ordinarias = dayTotal > 0 ? Math.min(dayTotal, contractHours) : 0;
+      const extras = dayTotal > contractHours ? dayTotal - contractHours : 0;
 
       processedDays.push({
-        date: currentDayStr,
-        dayName,
-        firstEntry,
-        lastExit,
-        ordinarias: dayTotalHours > 0 ? Math.min(dayTotalHours, contractHours) : 0,
-        extras: extras
+        fecha: `${day}/${parseInt(month)}/${year}`,
+        dia: dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase(),
+        entrada,
+        salida,
+        ordinarias: ordinarias > 0 ? formatDecimalToTime(ordinarias) : "",
+        extras: extras > 0 ? formatDecimalToTime(extras) : ""
       });
 
-      monthlyTotal += dayTotalHours;
-      extrasTotal += extras;
+      totalOrd += ordinarias;
+      totalExt += extras;
     }
 
     setReportData(processedDays);
-    setTotalMonthlyHours(monthlyTotal);
-    setTotalExtras(extrasTotal);
+    setTotals({ ordinarias: totalOrd, extras: totalExt });
     setLoading(false);
   };
 
@@ -117,14 +111,18 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
           <head>
             <title>Registro Jornada - ${profile.full_name}</title>
             <style>
-              body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
-              table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 20px; }
-              th, td { border: 1px solid #000; padding: 6px; text-align: center; }
-              th { background-color: #f0f0f0; font-weight: bold; }
-              .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
-              .info-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; border: 1px solid #000; padding: 15px; margin-bottom: 20px; }
-              .footer { margin-top: 50px; display: flex; justify-content: space-between; }
-              .signature { width: 40%; border-top: 1px solid #000; text-align: center; padding-top: 5px; font-weight: bold; font-size: 10px; }
+              body { font-family: sans-serif; padding: 20mm; color: #000; }
+              .header { font-weight: bold; font-size: 14pt; margin-bottom: 10pt; }
+              .sub-header { font-size: 9pt; color: #444; margin-bottom: 20pt; }
+              .info-section { display: flex; justify-content: space-between; margin-bottom: 20pt; font-size: 10pt; }
+              .info-block { width: 48%; }
+              .label { font-weight: bold; color: #666; font-size: 8pt; text-transform: uppercase; }
+              .value { font-weight: bold; font-size: 11pt; margin-bottom: 8pt; }
+              table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+              th, td { border: 0.5pt solid #000; padding: 6pt; text-align: center; }
+              th { background-color: #f2f2f2; font-weight: bold; }
+              .footer { margin-top: 40pt; display: flex; justify-content: space-between; }
+              .signature { width: 45%; border-top: 1px solid #000; text-align: center; padding-top: 5pt; font-size: 9pt; font-weight: bold; }
             </style>
           </head>
           <body>${content.innerHTML}</body>
@@ -132,10 +130,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
       `);
       printWindow.document.close();
       printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
     }
   };
 
@@ -150,11 +145,11 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 bg-white text-black">
         <div className="p-4 border-b flex justify-between items-center bg-slate-50">
           <div className="flex items-center gap-4">
-             <h3 className="font-bold text-black">Vista Previa</h3>
+             <h3 className="font-bold text-black text-lg">Informe de Registro de Jornada</h3>
              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border p-1 text-sm bg-white" />
           </div>
           <div className="flex gap-2">
-            <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white">
+            <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
               <Printer className="h-4 w-4 mr-2" /> Imprimir / PDF
             </Button>
             <Button variant="ghost" onClick={() => setIsOpen(false)}><X className="h-4 w-4" /></Button>
@@ -162,27 +157,24 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
         </div>
 
         <div className="flex-1 overflow-auto p-8 bg-slate-200">
-          <div ref={printRef} className="bg-white p-10 mx-auto shadow-lg text-left" style={{ width: '210mm', minHeight: '297mm' }}>
-            <div className="header">
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                <div style={{ textAlign: 'left' }}>
-                  <h1 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}>REGISTRO DE JORNADA LABORAL</h1>
-                  <p style={{ fontSize: '10px', margin: 0 }}>Art. 34.9 del Estatuto de los Trabajadores</p>
-                </div>
-                <h2 style={{ fontSize: '18px', margin: 0 }}>{selectedMonth}</h2>
-              </div>
-            </div>
+          <div ref={printRef} className="bg-white p-16 mx-auto shadow-lg" style={{ width: '210mm', minHeight: '297mm' }}>
+            
+            <div className="header">REGISTRO DE JORNADA LABORAL</div>
+            <div className="sub-header">Conforme al Art. 34.9 del Estatuto de los Trabajadores</div>
 
-            <div className="info-grid">
-              <div style={{ textAlign: 'left' }}>
-                <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#666', margin: 0 }}>EMPRESA</p>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '2px 0' }}>OFIMATIC BAIX S.L.</p>
-                <p style={{ fontSize: '11px', margin: 0 }}>NIF: B-65836512</p>
+            <div className="info-section">
+              <div className="info-block">
+                <div className="label">EMPRESA</div>
+                <div className="value">OFIMATIC BAIX S.L.</div>
+                <div className="label">NIF</div>
+                <div className="value">B-65836512</div>
               </div>
-              <div style={{ textAlign: 'left' }}>
-                <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#666', margin: 0 }}>TRABAJADOR/A</p>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '2px 0', textTransform: 'uppercase' }}>{profile.full_name}</p>
-                <p style={{ fontSize: '11px', margin: 0 }}>DNI/NIE: {profile.dni || '---'}</p>
+              <div className="info-block">
+                <div className="label">TRABAJADOR/A</div>
+                <div className="value" style={{ textTransform: 'uppercase' }}>{profile.full_name}</div>
+                <div className="label">DNI/NIE: {profile.dni || '---'}</div>
+                <div className="value" style={{ fontSize: '10pt', marginTop: '4pt' }}>Puesto: {profile.position || '---'}</div>
+                <div className="label">Periodo: {selectedMonth}</div>
               </div>
             </div>
 
@@ -195,35 +187,39 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
                   <th>Salida</th>
                   <th>Ordinarias</th>
                   <th>Extras</th>
-                  <th style={{ width: '80px' }}>Firma</th>
+                  <th style={{ width: '70px' }}>Firma</th>
                 </tr>
               </thead>
               <tbody>
-                {reportData.map((day) => (
-                  <tr key={day.date}>
-                    <td>{new Date(day.date).toLocaleDateString('es-ES')}</td>
-                    <td style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{day.dayName}</td>
-                    <td style={{ fontFamily: 'monospace' }}>{day.firstEntry}</td>
-                    <td style={{ fontFamily: 'monospace' }}>{day.lastExit}</td>
-                    <td style={{ fontWeight: 'bold' }}>{day.ordinarias > 0 ? formatDecimalHours(day.ordinarias) : ''}</td>
-                    <td style={{ color: '#666' }}>{day.extras > 0 ? formatDecimalHours(day.extras) : ''}</td>
+                {reportData.map((day, i) => (
+                  <tr key={i}>
+                    <td>{day.fecha}</td>
+                    <td style={{ fontWeight: 'bold' }}>{day.dia}</td>
+                    <td>{day.entrada}</td>
+                    <td>{day.salida}</td>
+                    <td style={{ fontWeight: 'bold' }}>{day.ordinarias}</td>
+                    <td style={{ color: '#444' }}>{day.extras}</td>
                     <td></td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ backgroundColor: '#f0f0f0', fontWeight: 'bold' }}>
-                  <td colSpan={4} style={{ textAlign: 'right', paddingRight: '10px' }}>TOTALES</td>
-                  <td>{formatDecimalHours(reportData.reduce((acc, d) => acc + d.ordinarias, 0))}</td>
-                  <td>{formatDecimalHours(totalExtras)}</td>
+                <tr style={{ backgroundColor: '#f2f2f2', fontWeight: 'bold' }}>
+                  <td colSpan={4} style={{ textAlign: 'right', paddingRight: '15px' }}>TOTALES</td>
+                  <td>{formatDecimalToTime(totals.ordinarias)}</td>
+                  <td>{formatDecimalToTime(totals.extras)}</td>
                   <td></td>
                 </tr>
               </tfoot>
             </table>
 
+            <div style={{ fontSize: '8pt', marginTop: '20pt', color: '#444', textAlign: 'justify' }}>
+              El trabajador/a declara haber recibido copia de este registro y estar conforme con las horas reflejadas[cite: 13].
+            </div>
+
             <div className="footer">
-              <div className="signature">FIRMA DE LA EMPRESA</div>
-              <div className="signature">FIRMA DEL TRABAJADOR/A</div>
+              <div className="signature">FIRMA DE LA EMPRESA [cite: 14]</div>
+              <div className="signature">FIRMA DEL TRABAJADOR/A [cite: 15]</div>
             </div>
           </div>
         </div>
