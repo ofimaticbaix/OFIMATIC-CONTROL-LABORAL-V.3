@@ -21,7 +21,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); 
   const [reportData, setReportData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [totalMonthlyHours, setTotalMonthlyHours] = useState(0);
+  const [totalOrdinary, setTotalOrdinary] = useState(0);
   const [totalExtras, setTotalExtras] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -33,6 +33,7 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
   }, [isOpen, selectedMonth, profile]);
 
   const formatDecimalHours = (decimal: number) => {
+    if (decimal === 0) return '';
     const hours = Math.floor(decimal);
     const minutes = Math.round((decimal - hours) * 60);
     return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
@@ -60,8 +61,11 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     }
 
     const processedDays = [];
-    let monthlyTotal = 0;
-    let extrasTotal = 0;
+    let accOrdinary = 0;
+    let accExtras = 0;
+
+    // Determinar jornada contratada
+    const contractHours = profile.daily_hours || 8;
 
     for (let day = 1; day <= lastDay; day++) {
       const currentDayStr = `${year}-${month}-${day.toString().padStart(2, '0')}`;
@@ -73,18 +77,21 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
 
       if (dayEntries.length > 0) {
         if (dayEntries[0].clock_in) {
-            firstEntry = new Date(dayEntries[0].clock_in).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          firstEntry = new Date(dayEntries[0].clock_in).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
         }
         const lastEntry = dayEntries[dayEntries.length - 1];
         if (lastEntry.clock_out) {
-            lastExit = new Date(lastEntry.clock_out).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          lastExit = new Date(lastEntry.clock_out).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
         }
-        dayEntries.forEach(e => { if (e.hours_worked) dayTotalHours += e.hours_worked; });
+        dayEntries.forEach(e => { 
+          if (e.hours_worked) dayTotalHours += e.hours_worked; 
+        });
       }
 
       const dateObj = new Date(parseInt(year), parseInt(month) - 1, day);
       const dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase();
-      const contractHours = profile.daily_hours || 8;
+      
+      const ordinarias = dayTotalHours > 0 ? Math.min(dayTotalHours, contractHours) : 0;
       const extras = dayTotalHours > contractHours ? dayTotalHours - contractHours : 0;
 
       processedDays.push({
@@ -92,17 +99,17 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
         dayName,
         firstEntry,
         lastExit,
-        ordinarias: dayTotalHours > 0 ? Math.min(dayTotalHours, contractHours) : 0,
-        extras: extras
+        ordinarias,
+        extras
       });
 
-      monthlyTotal += dayTotalHours;
-      extrasTotal += extras;
+      accOrdinary += ordinarias;
+      accExtras += extras;
     }
 
     setReportData(processedDays);
-    setTotalMonthlyHours(monthlyTotal);
-    setTotalExtras(extrasTotal);
+    setTotalOrdinary(accOrdinary);
+    setTotalExtras(accExtras);
     setLoading(false);
   };
 
@@ -113,23 +120,142 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
           <head>
+            <meta charset="UTF-8">
             <title>Registro Jornada - ${profile.full_name}</title>
             <style>
-              body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
-              .report-container { max-width: 800px; margin: 0 auto; }
-              .header-table { width: 100%; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-              .info-grid { display: flex; justify-content: space-between; border: 1px solid #000; padding: 10px; margin-bottom: 20px; }
-              table { width: 100%; border-collapse: collapse; font-size: 10px; }
-              th, td { border: 1px solid #000; padding: 4px; text-align: center; }
-              th { background-color: #f0f0f0; }
-              .footer-signatures { display: flex; justify-content: space-between; margin-top: 50px; }
-              .signature-box { width: 40%; border-top: 1px solid #000; text-align: center; padding-top: 5px; font-weight: bold; }
-              @media print { .no-print { display: none; } }
+              @page { 
+                size: A4; 
+                margin: 15mm; 
+              }
+              * { 
+                margin: 0; 
+                padding: 0; 
+                box-sizing: border-box; 
+              }
+              body { 
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 10pt;
+                color: #000;
+                background: white;
+              }
+              .report-container {
+                width: 100%;
+                max-width: 210mm;
+                margin: 0 auto;
+                background: white;
+              }
+              .header {
+                border-bottom: 2px solid #000;
+                padding-bottom: 8px;
+                margin-bottom: 15px;
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-end;
+              }
+              .header h1 {
+                font-size: 14pt;
+                font-weight: bold;
+                margin: 0;
+                text-transform: uppercase;
+              }
+              .header .subtitle {
+                font-size: 8pt;
+                color: #666;
+                margin-top: 2px;
+              }
+              .header .month {
+                font-size: 16pt;
+                font-weight: bold;
+              }
+              .info-box {
+                border: 1px solid #000;
+                padding: 10px;
+                margin-bottom: 15px;
+                display: flex;
+                justify-content: space-between;
+              }
+              .info-section {
+                width: 48%;
+              }
+              .info-label {
+                font-size: 8pt;
+                color: #666;
+                font-weight: bold;
+                text-transform: uppercase;
+                margin-bottom: 3px;
+              }
+              .info-value {
+                font-size: 11pt;
+                font-weight: bold;
+                margin-bottom: 2px;
+              }
+              .info-detail {
+                font-size: 9pt;
+                margin-bottom: 1px;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+              }
+              th {
+                background-color: #f0f0f0;
+                border: 1px solid #000;
+                padding: 6px 4px;
+                text-align: center;
+                font-weight: bold;
+                font-size: 9pt;
+              }
+              td {
+                border: 1px solid #000;
+                padding: 4px;
+                text-align: center;
+                font-size: 9pt;
+              }
+              tfoot td {
+                background-color: #f0f0f0;
+                font-weight: bold;
+                font-size: 10pt;
+              }
+              .legal-text {
+                margin-top: 20px;
+                font-size: 8pt;
+                color: #444;
+                line-height: 1.4;
+              }
+              .signatures {
+                margin-top: 50px;
+                display: flex;
+                justify-content: space-between;
+                page-break-inside: avoid;
+              }
+              .signature-box {
+                width: 45%;
+                text-align: center;
+              }
+              .signature-line {
+                border-top: 1px solid #000;
+                padding-top: 8px;
+                font-weight: bold;
+                font-size: 9pt;
+                text-transform: uppercase;
+              }
+              @media print {
+                .no-print { display: none !important; }
+                body { background: white; }
+                .report-container { 
+                  width: 100%;
+                  max-width: none;
+                }
+              }
             </style>
           </head>
-          <body>${content.innerHTML}</body>
+          <body>
+            ${content.innerHTML}
+          </body>
         </html>
       `);
       printWindow.document.close();
@@ -141,101 +267,146 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
     }
   };
 
+  // Formatear mes-año para el título
+  const getMonthYearTitle = () => {
+    const [year, month] = selectedMonth.split('-');
+    return `${year}-${month}`;
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2 border-slate-700 text-white">
+        <Button variant="outline" size="sm" className="gap-2 border-slate-700 text-white hover:bg-slate-800">
           <FileText className="h-4 w-4" /> Informe
         </Button>
       </DialogTrigger>
       
-      <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 bg-white text-black">
-        <div className="p-4 border-b flex justify-between items-center bg-slate-50 no-print">
+      <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 bg-slate-900 border-slate-800">
+        {/* BARRA SUPERIOR - NO SE IMPRIME */}
+        <div className="no-print p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
           <div className="flex items-center gap-4">
-             <h3 className="font-bold text-black">Vista Previa del Informe</h3>
-             <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border p-1 text-sm bg-white" />
+            <h3 className="font-bold text-white text-lg">Vista Previa del Informe</h3>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-slate-400" />
+              <input 
+                type="month" 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)} 
+                className="border border-slate-700 bg-slate-900 text-white rounded px-3 py-1 text-sm"
+              />
+            </div>
           </div>
           <div className="flex gap-2">
-            <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white">
-              <Printer className="h-4 w-4 mr-2" /> Imprimir / PDF
+            <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+              <Printer className="h-4 w-4" /> Imprimir / PDF
             </Button>
-            <Button variant="ghost" onClick={() => setIsOpen(false)}><X className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-8 bg-slate-200">
-          <div ref={printRef} className="bg-white p-10 mx-auto shadow-lg text-left" style={{ width: '210mm', minHeight: '297mm' }}>
-            
-            {/* CABECERA [cite: 1, 10] */}
-            <div className="header-table">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                <div>
-                  <h1 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}>REGISTRO DE JORNADA LABORAL</h1>
-                  <p style={{ fontSize: '10px', margin: 0 }}>Conforme al Art. 34.9 del Estatuto de los Trabajadores</p>
+        {/* ÁREA DE SCROLL CON VISTA PREVIA */}
+        <div className="flex-1 overflow-auto bg-slate-800 p-8">
+          <div 
+            ref={printRef} 
+            className="report-container bg-white shadow-2xl mx-auto"
+            style={{ 
+              width: '210mm', 
+              minHeight: '297mm',
+              padding: '20mm'
+            }}
+          >
+            {/* CABECERA */}
+            <div className="header">
+              <div>
+                <h1>REGISTRO DE JORNADA LABORAL</h1>
+                <div className="subtitle">Conforme al Art. 34.9 del Estatuto de los Trabajadores</div>
+              </div>
+              <div className="month">{getMonthYearTitle()}</div>
+            </div>
+
+            {/* INFO EMPRESA Y TRABAJADOR */}
+            <div className="info-box">
+              <div className="info-section">
+                <div className="info-label">Empresa</div>
+                <div className="info-value">OFIMATIC BAIX S.L.</div>
+                <div className="info-detail">NIF: B-65836512</div>
+              </div>
+              <div className="info-section">
+                <div className="info-label">Trabajador/a</div>
+                <div className="info-value" style={{ textTransform: 'uppercase' }}>
+                  {profile.full_name}
                 </div>
-                <h2 style={{ fontSize: '18px', margin: 0 }}>{selectedMonth}</h2>
+                <div className="info-detail">DNI/NIE: {profile.dni || '---'}</div>
+                <div className="info-detail">Puesto: {profile.position || '---'}</div>
+                {profile.work_schedule ? (
+                  <div className="info-detail">Jornada: Según Cuadrante</div>
+                ) : (
+                  <div className="info-detail">Jornada: {profile.daily_hours || 8}h/día</div>
+                )}
               </div>
             </div>
 
-            {/* INFO EMPRESA Y TRABAJADOR [cite: 2, 3, 5, 6] */}
-            <div className="info-grid">
-              <div style={{ width: '50%' }}>
-                <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#666', margin: 0 }}>EMPRESA</p>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '2px 0' }}>OFIMATIC BAIX S.L.</p>
-                <p style={{ fontSize: '11px', margin: 0 }}>NIF: B-65836512</p>
-              </div>
-              <div style={{ width: '50%' }}>
-                <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#666', margin: 0 }}>TRABAJADOR/A</p>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '2px 0', textTransform: 'uppercase' }}>{profile.full_name}</p>
-                <p style={{ fontSize: '11px', margin: 0 }}>DNI/NIE: {profile.dni || '---'}</p>
-                <p style={{ fontSize: '11px', margin: 0 }}>Puesto: {profile.position || '---'}</p>
-              </div>
-            </div>
-
-            {/* TABLA DE REGISTROS [cite: 11] */}
+            {/* TABLA DE REGISTROS */}
             <table>
               <thead>
                 <tr>
-                  <th>Fecha</th>
-                  <th>Día</th>
-                  <th>Entrada</th>
-                  <th>Salida</th>
-                  <th>Ordinarias</th>
-                  <th>Extras</th>
-                  <th style={{ width: '80px' }}>Firma</th>
+                  <th style={{ width: '12%' }}>Fecha</th>
+                  <th style={{ width: '8%' }}>Día</th>
+                  <th style={{ width: '12%' }}>Entrada</th>
+                  <th style={{ width: '12%' }}>Salida</th>
+                  <th style={{ width: '15%' }}>Ordinarias</th>
+                  <th style={{ width: '15%' }}>Extras</th>
+                  <th style={{ width: '16%' }}>Firma</th>
                 </tr>
               </thead>
               <tbody>
-                {reportData.map((day) => (
-                  <tr key={day.date}>
-                    <td>{new Date(day.date).toLocaleDateString('es-ES')}</td>
-                    <td style={{ fontWeight: 'bold' }}>{day.dayName}</td>
-                    <td>{day.firstEntry}</td>
-                    <td>{day.lastExit}</td>
-                    <td style={{ fontWeight: 'bold' }}>{day.ordinarias > 0 ? formatDecimalHours(day.ordinarias) : ''}</td>
-                    <td style={{ color: '#666' }}>{day.extras > 0 ? formatDecimalHours(day.extras) : ''}</td>
-                    <td></td>
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                      Generando informe...
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  reportData.map((day) => (
+                    <tr key={day.date}>
+                      <td>{new Date(day.date + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                      <td style={{ fontWeight: 'bold' }}>{day.dayName}</td>
+                      <td>{day.firstEntry}</td>
+                      <td>{day.lastExit}</td>
+                      <td style={{ fontWeight: 'bold' }}>{formatDecimalHours(day.ordinarias)}</td>
+                      <td style={{ color: '#666' }}>{formatDecimalHours(day.extras)}</td>
+                      <td></td>
+                    </tr>
+                  ))
+                )}
               </tbody>
               <tfoot>
-                <tr style={{ backgroundColor: '#f0f0f0', fontWeight: 'bold' }}>
-                  <td colSpan={4} style={{ textAlign: 'right', paddingRight: '10px' }}>TOTALES</td>
-                  <td>{formatDecimalHours(reportData.reduce((acc, d) => acc + d.ordinarias, 0))}</td>
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'right', paddingRight: '10px' }}>
+                    TOTALES
+                  </td>
+                  <td>{formatDecimalHours(totalOrdinary)}</td>
                   <td>{formatDecimalHours(totalExtras)}</td>
                   <td></td>
                 </tr>
               </tfoot>
             </table>
 
-            <p style={{ fontSize: '9px', marginTop: '20px', color: '#444' }}>
-              El trabajador/a declara haber recibido copia de este registro y estar conforme con las horas reflejadas[cite: 13].
-            </p>
+            {/* TEXTO LEGAL */}
+            <div className="legal-text">
+              El trabajador/a declara haber recibido copia de este registro y estar conforme con las horas reflejadas.
+            </div>
 
-            {/* FIRMAS [cite: 14, 15] */}
-            <div className="footer-signatures">
-              <div className="signature-box">FIRMA DE LA EMPRESA</div>
-              <div className="signature-box">FIRMA DEL TRABAJADOR/A</div>
+            {/* FIRMAS */}
+            <div className="signatures">
+              <div className="signature-box">
+                <div className="signature-line">FIRMA DE LA EMPRESA</div>
+              </div>
+              <div className="signature-box">
+                <div className="signature-line">FIRMA DEL TRABAJADOR/A</div>
+              </div>
             </div>
           </div>
         </div>
