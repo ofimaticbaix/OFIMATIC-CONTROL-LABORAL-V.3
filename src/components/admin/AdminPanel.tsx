@@ -51,7 +51,6 @@ const fetchAddressFromCoords = async (lat: number, lng: number): Promise<string 
     }
     return null;
   } catch (error) {
-    console.error("Error obteniendo dirección:", error);
     return null;
   }
 };
@@ -65,7 +64,6 @@ export const AdminPanel = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  
   const [isFixing, setIsFixing] = useState(false);
   const { toast } = useToast();
 
@@ -86,7 +84,7 @@ export const AdminPanel = () => {
     const val = parseFloat(hours);
     const { error } = await supabase.from('profiles').update({ weekly_hours: val }).eq('id', id);
     if (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar la jornada.' });
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar.' });
     } else {
       toast({ title: 'Actualizado', description: 'Jornada laboral guardada.' });
       loadData();
@@ -100,9 +98,7 @@ export const AdminPanel = () => {
         const address = e.address || e.location_address;
         if (lat && lng && lat !== 0) {
             const distance = getDistanceFromLatLonInKm(lat, lng, 41.359024, 2.074219);
-            if (distance > 0.3 && (!address || address.length < 5 || address.startsWith("41."))) {
-                return true;
-            }
+            if (distance > 0.3 && (!address || address.length < 5 || address.startsWith("41."))) return true;
         }
         return false;
     });
@@ -112,8 +108,6 @@ export const AdminPanel = () => {
     if (brokenEntries.length === 0) return;
     setIsFixing(true);
     let fixedCount = 0;
-    toast({ title: "Reparando...", description: `Traduciendo ${brokenEntries.length} direcciones.` });
-
     for (const entry of brokenEntries) {
         const lat = entry.gps_lat || entry.location_lat;
         const lng = entry.gps_lng || entry.location_lng;
@@ -124,27 +118,25 @@ export const AdminPanel = () => {
                 fixedCount++;
             }
         }
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
     toast({ title: "¡Listo!", description: `Se han corregido ${fixedCount} direcciones.` });
     loadData(); 
     setIsFixing(false);
   };
 
-  const formatTime = (isoString: string): string => new Date(isoString).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const formatTime = (isoString: string): string => new Date(isoString).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
   const formatDate = (isoString: string): string => new Date(isoString).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const getLocationString = (entry: TimeEntryWithProfile) => {
     const lat = entry.gps_lat || entry.location_lat;
     const lng = entry.gps_lng || entry.location_lng;
     const address = entry.address || entry.location_address || '';
-    const SHOP_LAT = 41.359024; const SHOP_LNG = 2.074219;
-
-    if (lat && lng && lat !== 0 && lng !== 0) {
-        const distance = getDistanceFromLatLonInKm(lat, lng, SHOP_LAT, SHOP_LNG);
-        if (distance < 0.3) return "AN STILE UNISEX, Av. del Parc, 31, Cornellà";
+    if (lat && lng && lat !== 0) {
+        const distance = getDistanceFromLatLonInKm(lat, lng, 41.359024, 2.074219);
+        if (distance < 0.3) return "AN STILE UNISEX, Cornellà";
         if (address && address.length > 5 && !address.startsWith("41.")) return `📍 ${address}`;
-        return `📍 Ext: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+        return `📍 Ext: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
     }
     return address || "📍 Ubicación no disponible";
   };
@@ -167,78 +159,75 @@ export const AdminPanel = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Administración OFIMATIC</h2>
-          <p className="text-muted-foreground text-sm">Gestión de registros y personal</p>
-        </div>
+        <div><h2 className="text-2xl font-bold tracking-tight text-white">Administración</h2></div>
         <div className="flex flex-wrap gap-2">
             <CreateManualEntryDialog profiles={profiles} onCreated={loadData} />
             {brokenEntries.length > 0 && (
-                <Button variant="outline" onClick={handleFixOldAddresses} disabled={isFixing} className="gap-2 border-amber-500/50 text-amber-500">
+                <Button variant="outline" onClick={handleFixOldAddresses} disabled={isFixing} className="gap-2 border-amber-500 text-amber-500">
                     {isFixing ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertCircle className="h-4 w-4" />}
-                    {isFixing ? "Reparando..." : `Reparar (${brokenEntries.length}) Direcciones`}
+                    {isFixing ? "Reparando..." : `Reparar (${brokenEntries.length})`}
                 </Button>
             )}
         </div>
       </div>
 
       <Tabs defaultValue="registros" className="w-full">
-        <TabsList className="bg-muted/50 p-1">
+        <TabsList className="bg-slate-900 border-slate-800">
           <TabsTrigger value="registros" className="gap-2"><Clock className="h-4 w-4" /> Registros</TabsTrigger>
-          <TabsTrigger value="personal" className="gap-2"><Users className="h-4 w-4" /> Gestión de Personal</TabsTrigger>
+          <TabsTrigger value="personal" className="gap-2"><Users className="h-4 w-4" /> Personal</TabsTrigger>
         </TabsList>
 
         <TabsContent value="registros" className="space-y-6 pt-4">
-          <div className="grid gap-4 md:grid-cols-4 text-white">
-            <Card className="bg-slate-900 border-slate-800"><CardContent className="pt-6"><p className="text-xs text-slate-400 uppercase font-semibold">Total Registros</p><p className="text-3xl font-bold">{filteredEntries.length}</p></CardContent></Card>
-            <Card className="bg-slate-900 border-slate-800"><CardContent className="pt-6"><p className="text-xs text-slate-400 uppercase font-semibold">Horas Totales</p><p className="text-3xl font-bold">{formatDecimalHours(totalHours)}</p></CardContent></Card>
-            <Card className="bg-slate-900 border-slate-800"><CardContent className="pt-6"><p className="text-xs text-slate-400 uppercase font-semibold">Presenciales</p><p className="text-3xl font-bold text-emerald-500">{officeDays}</p></CardContent></Card>
-            <Card className="bg-slate-900 border-slate-800"><CardContent className="pt-6"><p className="text-xs text-slate-400 uppercase font-semibold">Teletrabajo</p><p className="text-3xl font-bold text-blue-500">{remoteDays}</p></CardContent></Card>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card className="bg-slate-900 border-slate-800 text-white"><CardContent className="pt-6"><p className="text-xs text-slate-400 font-semibold uppercase">Total Registros</p><p className="text-2xl font-bold">{filteredEntries.length}</p></CardContent></Card>
+            <Card className="bg-slate-900 border-slate-800 text-white"><CardContent className="pt-6"><p className="text-xs text-slate-400 font-semibold uppercase">Horas Totales</p><p className="text-2xl font-bold">{formatDecimalHours(totalHours)}</p></CardContent></Card>
+            <Card className="bg-slate-900 border-slate-800 text-white"><CardContent className="pt-6"><p className="text-xs text-slate-400 font-semibold uppercase">Presencial</p><p className="text-2xl font-bold text-emerald-500">{officeDays}</p></CardContent></Card>
+            <Card className="bg-slate-900 border-slate-800 text-white"><CardContent className="pt-6"><p className="text-xs text-slate-400 font-semibold uppercase">Remoto</p><p className="text-2xl font-bold text-blue-500">{remoteDays}</p></CardContent></Card>
           </div>
 
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="bg-slate-900 border-slate-800 text-white">
+            <CardHeader className="pb-3 border-b border-slate-800">
                 <div className="flex justify-between items-center">
-                    <CardTitle className="text-lg flex items-center gap-2"><Filter className="h-5 w-5" /> Filtros</CardTitle>
+                    <CardTitle className="text-lg flex items-center gap-2 font-bold uppercase tracking-wider"><Filter className="h-5 w-5" /> Filtros</CardTitle>
                     <Button variant="ghost" size="sm" onClick={() => { setWorkerFilter('all'); setTypeFilter('all'); setDateFrom(''); setDateTo(''); setSearchTerm(''); }}>Limpiar</Button>
                 </div>
-            </Header>
-            <CardContent>
+            </CardHeader>
+            <CardContent className="pt-4">
               <div className="grid gap-4 md:grid-cols-5">
-                <div className="space-y-2"><label className="text-xs font-medium">Buscar</label><Input placeholder="Nombre..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                <div className="space-y-2"><label className="text-xs font-medium">Trabajador</label>
+                <div className="space-y-2 text-white"><label className="text-xs font-medium uppercase text-slate-400">Buscar</label><Input placeholder="Nombre..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-slate-950 border-slate-700" /></div>
+                <div className="space-y-2"><label className="text-xs font-medium uppercase text-slate-400">Trabajador</label>
                   <Select value={workerFilter} onValueChange={setWorkerFilter}>
-                    <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">Todos</SelectItem>{profiles.map((p) => (<SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>))}</SelectContent>
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-white"><SelectValue placeholder="Todos" /></SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700 text-white"><SelectItem value="all">Todos</SelectItem>{profiles.map((p) => (<SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>))}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><label className="text-xs font-medium">Tipo</label>
+                <div className="space-y-2"><label className="text-xs font-medium uppercase text-slate-400">Tipo</label>
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="office">Presencial</SelectItem><SelectItem value="remote">Teletrabajo</SelectItem></SelectContent>
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-white"><SelectValue placeholder="Todos" /></SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700 text-white"><SelectItem value="all">Todos</SelectItem><SelectItem value="office">Presencial</SelectItem><SelectItem value="remote">Teletrabajo</SelectItem></SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><label className="text-xs font-medium">Desde</label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
-                <div className="space-y-2"><label className="text-xs font-medium">Hasta</label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
+                <div className="space-y-2"><label className="text-xs font-medium uppercase text-slate-400">Desde</label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-slate-950 border-slate-700 text-white" /></div>
+                <div className="space-y-2"><label className="text-xs font-medium uppercase text-slate-400">Hasta</label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-slate-950 border-slate-700 text-white" /></div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle>Historial de Jornada</CardTitle></CardHeader>
-            <CardContent>
-              <div className="rounded-md border overflow-x-auto">
+          <Card className="bg-slate-900 border-slate-800 text-white">
+            <CardHeader className="border-b border-slate-800"><CardTitle className="uppercase tracking-wider">Historial de Jornada</CardTitle></CardHeader>
+            <CardContent className="pt-4">
+              <div className="rounded-md border border-slate-800 overflow-x-auto">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>Fecha</TableHead><TableHead>Entrada</TableHead><TableHead>Salida</TableHead><TableHead>Ubicación</TableHead><TableHead className="text-right">Horas</TableHead><TableHead className="w-[60px]"></TableHead></TableRow></TableHeader>
+                  <TableHeader className="bg-slate-950"><TableRow><TableHead className="text-slate-400 font-bold uppercase">Nombre</TableHead><TableHead className="text-slate-400 font-bold uppercase">Fecha</TableHead><TableHead className="text-slate-400 font-bold uppercase">Entrada</TableHead><TableHead className="text-slate-400 font-bold uppercase">Salida</TableHead><TableHead className="text-slate-400 font-bold uppercase">Ubicación</TableHead><TableHead className="text-right text-slate-400 font-bold uppercase">Horas</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
                     {filteredEntries.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="font-medium text-xs">{entry.profiles?.full_name || '-'}</TableCell>
-                        <TableCell className="text-xs">{formatDate(entry.date)}</TableCell>
-                        <TableCell className="font-mono text-xs">{entry.clock_in ? formatTime(entry.clock_in) : '--:--'}</TableCell>
-                        <TableCell className="font-mono text-xs">{entry.clock_out ? formatTime(entry.clock_out) : '--:--'}</TableCell>
-                        <TableCell className="max-w-[180px] truncate text-xs">{getLocationString(entry)}</TableCell>
-                        <TableCell className="text-right font-bold text-xs">{entry.hours_worked ? formatDecimalHours(entry.hours_worked) : '-'}</TableCell>
+                      <TableRow key={entry.id} className="border-slate-800 hover:bg-slate-800/50">
+                        <TableCell className="font-medium text-xs text-slate-300">{entry.profiles?.full_name}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{formatDate(entry.date)}</TableCell>
+                        <TableCell className="font-mono text-xs text-emerald-400">{entry.clock_in ? formatTime(entry.clock_in) : '--:--'}</TableCell>
+                        <TableCell className="font-mono text-xs text-blue-400">{entry.clock_out ? formatTime(entry.clock_out) : '--:--'}</TableCell>
+                        <TableCell className="max-w-[150px] truncate text-[10px] text-slate-500">{getLocationString(entry)}</TableCell>
+                        <TableCell className="text-right font-bold text-xs text-white">{entry.hours_worked ? formatDecimalHours(entry.hours_worked) : '-'}</TableCell>
                         <TableCell><EditTimeEntryDialog entry={entry} onUpdate={loadData} /></TableCell>
                       </TableRow>
                     ))}
@@ -250,26 +239,26 @@ export const AdminPanel = () => {
         </TabsContent>
 
         <TabsContent value="personal" className="pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Gestión de Contratos</CardTitle>
-              <CardDescription>Ajusta las horas semanales de contrato para cada empleado (Completa = 40h).</CardDescription>
+          <Card className="bg-slate-900 border-slate-800 text-white">
+            <CardHeader className="border-b border-slate-800">
+              <CardTitle className="text-lg uppercase tracking-wider">Gestión de Personal</CardTitle>
+              <CardDescription className="text-slate-400">Ajusta las horas semanales de contrato.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <Table>
-                <TableHeader><TableRow><TableHead>Trabajador</TableHead><TableHead>Contrato</TableHead><TableHead>Horas Semanales</TableHead><TableHead>Media Diaria</TableHead></TableRow></TableHeader>
+                <TableHeader className="bg-slate-950"><TableRow><TableHead className="text-slate-400 font-bold uppercase">Trabajador</TableHead><TableHead className="text-slate-400 font-bold uppercase">Contrato</TableHead><TableHead className="text-slate-400 font-bold uppercase">Horas Semanales</TableHead><TableHead className="text-right text-slate-400 font-bold uppercase">Día Media</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {profiles.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-bold">{p.full_name}</TableCell>
+                    <TableRow key={p.id} className="border-slate-800">
+                      <TableCell className="font-bold text-slate-200">{p.full_name}</TableCell>
                       <TableCell><Badge variant={p.weekly_hours >= 40 ? "default" : "secondary"}>{p.weekly_hours >= 40 ? "Completa" : "Parcial"}</Badge></TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Input type="number" className="w-20 h-8" defaultValue={p.weekly_hours || 40} onBlur={(e) => updateWorkerHours(p.id, e.target.value)} />
-                          <span className="text-xs text-muted-foreground">h / sem</span>
+                          <Input type="number" className="w-20 h-8 bg-slate-950 border-slate-700 text-white" defaultValue={p.weekly_hours || 40} onBlur={(e) => updateWorkerHours(p.id, e.target.value)} />
+                          <span className="text-xs text-slate-500 font-mono">h/sem</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{((p.weekly_hours || 40) / 5).toFixed(2)}h / día</TableCell>
+                      <TableCell className="text-right text-slate-400 font-mono">{((p.weekly_hours || 40) / 5).toFixed(2)}h/día</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
