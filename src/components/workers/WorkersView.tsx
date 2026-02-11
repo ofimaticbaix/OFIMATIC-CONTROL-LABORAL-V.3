@@ -13,6 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+// IMPORTAMOS EL COMPONENTE DE INFORME QUE USABA EL PANEL DE ADMIN
+import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
+
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [workerCredentials, setWorkerCredentials] = useState<any[]>([]);
@@ -40,95 +43,51 @@ export const WorkersView = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Cargamos perfiles (Indispensable)
       const { data: profilesData, error: profError } = await supabase
         .from('profiles')
         .select('*')
         .order('full_name', { ascending: true });
 
       if (profError) throw profError;
+
+      const { data: credsData } = await supabase
+        .from('worker_credentials')
+        .select('user_id, access_code');
+
       setProfiles(profilesData || []);
-
-      // 2. Cargamos credenciales (Opcional - No detiene la ejecución si falla)
-      try {
-        const { data: credsData, error: credsError } = await supabase
-          .from('worker_credentials')
-          .select('user_id, access_code');
-        
-        if (credsError) {
-          console.warn("Aviso: No se pudieron cargar las credenciales:", credsError.message);
-          setWorkerCredentials([]);
-        } else {
-          setWorkerCredentials(credsData || []);
-        }
-      } catch (innerErr) {
-        console.error("Error al acceder a worker_credentials:", innerErr);
-        setWorkerCredentials([]);
-      }
-
-    } catch (err: any) {
-      console.error("Error crítico en carga:", err);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Error de carga', 
-        description: 'Hubo un problema al conectar con la base de datos de perfiles.' 
-      });
+      setWorkerCredentials(credsData || []);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Error al cargar los trabajadores' });
     } finally {
       setLoading(false);
     }
   };
 
-  // --- LOGICA DE INFORMES ---
-
+  // Informe General de toda la plantilla (Impresión nativa)
   const generateGeneralReport = () => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       const activeWorkers = profiles.filter(p => p.is_active !== false);
-      const date = new Date().toLocaleDateString();
-
       printWindow.document.write(`
         <html>
           <head>
             <title>Informe General - Ofimatic</title>
             <style>
-              body { font-family: 'Segoe UI', sans-serif; padding: 30px; color: #333; }
-              .header { border-bottom: 3px solid #2563eb; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
-              .header h1 { margin: 0; color: #1e40af; font-size: 24px; text-transform: uppercase; }
-              .stats { background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; font-weight: bold; }
-              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-              th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; font-size: 11px; }
-              th { background-color: #f1f5f9; color: #475569; text-transform: uppercase; }
-              tr:nth-child(even) { background-color: #fcfcfc; }
-              .footer { margin-top: 40px; font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }
+              body { font-family: sans-serif; padding: 30px; }
+              .header { border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 20px; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; }
+              th { background-color: #f8fafc; }
             </style>
           </head>
           <body>
-            <div class="header">
-              <h1>OFIMATIC - Informe de Plantilla</h1>
-              <span>Fecha: ${date}</span>
-            </div>
-            <div class="stats">Resumen: ${activeWorkers.length} trabajadores activos.</div>
+            <div class="header"><h1>OFIMATIC - Listado de Plantilla</h1></div>
             <table>
-              <thead>
-                <tr>
-                  <th>Nombre Completo</th>
-                  <th>DNI/NIE</th>
-                  <th>Cargo / Puesto</th>
-                  <th>Tipo de Jornada</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Nombre</th><th>DNI</th><th>Puesto</th><th>Jornada</th></tr></thead>
               <tbody>
-                ${activeWorkers.map(p => `
-                  <tr>
-                    <td><strong>${p.full_name}</strong></td>
-                    <td>${p.dni || '---'}</td>
-                    <td>${p.position || 'No asignado'}</td>
-                    <td>${p.work_day_type || '8h'}</td>
-                  </tr>
-                `).join('')}
+                ${activeWorkers.map(p => `<tr><td>${p.full_name}</td><td>${p.dni || '---'}</td><td>${p.position || '---'}</td><td>${p.work_day_type || '8h'}</td></tr>`).join('')}
               </tbody>
             </table>
-            <div class="footer">Documento administrativo interno. Ofimatic Control Laboral.</div>
           </body>
         </html>
       `);
@@ -136,40 +95,6 @@ export const WorkersView = () => {
       printWindow.print();
     }
   };
-
-  const generateWorkerReport = (worker: any) => {
-    const pin = workerCredentials.find(c => c.user_id === worker.id)?.access_code || 'N/A';
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Ficha - ${worker.full_name}</title>
-            <style>
-              body { font-family: sans-serif; padding: 40px; }
-              .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-              .item { margin-bottom: 15px; font-size: 14px; }
-              .label { font-weight: bold; color: #666; width: 150px; display: inline-block; }
-              .value { font-weight: bold; color: #000; }
-            </style>
-          </head>
-          <body>
-            <div class="header"><h1>OFIMATIC - FICHA DE PERSONAL</h1></div>
-            <div class="item"><span class="label">Nombre:</span> <span class="value">${worker.full_name}</span></div>
-            <div class="item"><span class="label">DNI:</span> <span class="value">${worker.dni || '---'}</span></div>
-            <div class="item"><span class="label">Puesto:</span> <span class="value">${worker.position || '---'}</span></div>
-            <div class="item"><span class="label">Jornada:</span> <span class="value">${worker.work_day_type || '8h'}</span></div>
-            <div class="item"><span class="label">PIN de Acceso:</span> <span class="value" style="font-family: monospace; font-size: 18px;">${pin}</span></div>
-            <p style="margin-top: 50px; font-size: 10px; color: #888;">Documento generado el: ${new Date().toLocaleString()}</p>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
-  };
-
-  // --- LOGICA DE UI ---
 
   const filteredProfiles = profiles.filter(p => {
     const isActive = activeTab === 'active' ? (p.is_active !== false) : (p.is_active === false);
@@ -231,14 +156,9 @@ export const WorkersView = () => {
         </div>
         
         <div className="flex gap-3">
-          <Button 
-            onClick={generateGeneralReport}
-            variant="outline" 
-            className="border-slate-800 bg-slate-900/50 text-slate-300 hover:bg-slate-800 font-bold text-xs uppercase h-10 px-4"
-          >
-            <Printer className="h-4 w-4 mr-2" /> Informe General
+          <Button onClick={generateGeneralReport} variant="outline" className="border-slate-800 bg-slate-900/50 text-slate-300 hover:bg-slate-800 font-bold text-xs uppercase h-10 px-4">
+            <Printer className="h-4 w-4 mr-2" /> Listado General
           </Button>
-
           <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-bold text-xs uppercase h-10 px-6">
             <Plus className="h-4 w-4 mr-2" /> Nuevo Trabajador
           </Button>
@@ -277,8 +197,8 @@ export const WorkersView = () => {
             <TableHead className="text-slate-500 font-bold text-xs uppercase">Nombre</TableHead>
             <TableHead className="text-slate-500 font-bold text-xs uppercase">DNI</TableHead>
             <TableHead className="text-slate-500 font-bold text-xs uppercase">Clave</TableHead>
-            <TableHead className="text-slate-500 font-bold text-xs uppercase text-center">Jornada</TableHead>
-            <TableHead className="text-slate-500 font-bold text-xs uppercase">Puesto</TableHead>
+            <TableHead className="text-slate-500 font-bold text-xs uppercase">Jornada</TableHead>
+            <TableHead className="text-slate-500 font-bold text-xs uppercase">Informe</TableHead>
             <TableHead className="text-slate-500 font-bold text-xs uppercase text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
@@ -295,54 +215,17 @@ export const WorkersView = () => {
                   </button>
                 </div>
               </TableCell>
-              <TableCell className="py-4 text-center">
-                <span className={`px-4 py-1 rounded-full text-[10px] font-black border ${p.work_day_type === 'Personalizada' ? 'border-blue-500/50 text-blue-400 bg-blue-500/10' : 'border-slate-700 text-slate-400 bg-slate-800/50'}`}>
+              <TableCell className="py-4">
+                <span className="px-3 py-1 rounded-full border border-slate-700 text-slate-400 text-[10px] font-bold">
                   {p.work_day_type || '8h'}
                 </span>
               </TableCell>
-              <TableCell className="py-4 text-slate-300 text-sm">{p.position || '---'}</TableCell>
+              
+              {/* AQUÍ ESTÁ EL CAMBIO: EL BOTÓN DE INFORME QUE QUERÍAS */}
+              <TableCell className="py-4">
+                <MonthlyReportDialog profile={p} />
+              </TableCell>
+
               <TableCell className="py-4 text-right">
                 <div className="flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button 
-                    onClick={() => generateWorkerReport(p)}
-                    variant="outline" 
-                    size="sm" 
-                    className="h-8 bg-transparent border-slate-700 text-[10px] font-bold text-white hover:bg-slate-800"
-                  >
-                    <FileText className="h-3.5 w-3.5 mr-2" /> Ficha
-                  </Button>
-                  <button onClick={() => handleOpenDialog(p)} className="p-1.5 hover:bg-slate-800 rounded-md text-slate-400 hover:text-white"><Pencil className="h-4 w-4" /></button>
-                  <button className="p-1.5 hover:bg-red-500/10 rounded-md text-red-500/60 hover:text-red-500"><UserX className="h-4 w-4" /></button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-slate-950 text-white border-slate-800">
-          <DialogHeader><DialogTitle className="uppercase font-black text-xl">Ficha Empleado</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-            <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-[#111] border-slate-800" /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">DNI</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-[#111] border-slate-800" /></div>
-              <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-[#111] border-slate-800" /></div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-slate-500 uppercase text-[10px] font-bold">Tipo de Jornada</Label>
-              <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
-                <SelectTrigger className="bg-[#111] border-slate-800"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-white font-bold uppercase text-[10px]">
-                  <SelectItem value="8h">8h (Estándar)</SelectItem>
-                  <SelectItem value="Personalizada">Personalizada</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-blue-600 font-black uppercase h-11">{isSaving ? 'Guardando...' : 'Guardar Ficha'}</Button></DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-};
+                  <button onClick={() => handleOpenDialog(p)} className="p-1.5 hover
