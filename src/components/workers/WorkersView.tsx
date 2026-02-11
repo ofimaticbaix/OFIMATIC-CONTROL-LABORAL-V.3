@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { jsPDF } from 'jspdf'; // Asegúrate de instalarlo con: npm install jspdf
 
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -58,36 +57,38 @@ export const WorkersView = () => {
     }
   };
 
-  // Función para generar el Informe PDF
+  // Función de Informe usando impresión nativa para evitar errores de jspdf
   const generateWorkerReport = (worker: any) => {
-    const doc = new jsPDF();
     const pin = workerCredentials.find(c => c.user_id === worker.id)?.access_code || 'N/A';
-
-    // Estilo del PDF (Bauhaus/Ofimatic)
-    doc.setFillColor(15, 23, 42); // Fondo oscuro
-    doc.rect(0, 0, 210, 40, 'F');
     
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.text('OFIMATIC - FICHA DE PERSONAL', 20, 25);
-    
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
-    doc.text(`Nombre: ${worker.full_name}`, 20, 60);
-    doc.text(`DNI: ${worker.dni || 'No registrado'}`, 20, 70);
-    doc.text(`Puesto: ${worker.position || 'No especificado'}`, 20, 80);
-    doc.text(`Tipo de Jornada: ${worker.work_day_type || '8h'}`, 20, 90);
-    doc.text(`Clave de Acceso (PIN): ${pin}`, 20, 100);
-    
-    doc.setDrawColor(200, 200, 200);
-    doc.line(20, 110, 190, 110);
-    
-    doc.setFontSize(10);
-    doc.text(`Documento generado el: ${new Date().toLocaleString()}`, 20, 120);
-    
-    doc.save(`Informe_${worker.full_name.replace(' ', '_')}.pdf`);
-    
-    toast({ title: "Informe Generado", description: `Se ha descargado el PDF de ${worker.full_name}` });
+    // Crear una ventana temporal para imprimir
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Informe - ${worker.full_name}</title>
+            <style>
+              body { font-family: sans-serif; padding: 40px; }
+              .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+              .item { margin-bottom: 10px; }
+              .label { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="header"><h1>OFIMATIC - FICHA DE PERSONAL</h1></div>
+            <div class="item"><span class="label">Nombre:</span> ${worker.full_name}</div>
+            <div class="item"><span class="label">DNI:</span> ${worker.dni || '---'}</div>
+            <div class="item"><span class="label">Puesto:</span> ${worker.position || '---'}</div>
+            <div class="item"><span class="label">Jornada:</span> ${worker.work_day_type || '8h'}</div>
+            <div class="item"><span class="label">PIN de Acceso:</span> ${pin}</div>
+            <p style="margin-top: 50px; font-size: 10px;">Generado el: ${new Date().toLocaleString()}</p>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
   };
 
   const filteredProfiles = profiles.filter(p => {
@@ -145,10 +146,10 @@ export const WorkersView = () => {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-2xl font-bold text-white">Gestión de Trabajadores</h2>
-          <p className="text-slate-400 text-sm">Alta, baja y modificación de empleados</p>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Gestión de Trabajadores</h2>
+          <p className="text-slate-400 text-sm">Administración de plantilla y jornadas</p>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-bold text-xs uppercase h-10 px-6 shadow-lg shadow-blue-900/20">
+        <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-bold text-xs uppercase h-10 px-6">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Trabajador
         </Button>
       </div>
@@ -228,10 +229,9 @@ export const WorkersView = () => {
         </TableBody>
       </Table>
       
-      {/* Diálogo de Edición - El mismo que el anterior */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-slate-950 text-white border-slate-800 shadow-2xl">
-          <DialogHeader><DialogTitle className="uppercase font-black text-xl tracking-tighter">Ficha de Personal</DialogTitle></DialogHeader>
+        <DialogContent className="bg-slate-950 text-white border-slate-800">
+          <DialogHeader><DialogTitle className="uppercase font-black text-xl">Ficha Empleado</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 pt-4">
             <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-[#111] border-slate-800" /></div>
             <div className="grid grid-cols-2 gap-4">
@@ -248,7 +248,7 @@ export const WorkersView = () => {
                 </SelectContent>
               </Select>
             </div>
-            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-blue-600 font-black uppercase tracking-widest h-11">{isSaving ? 'Actualizando...' : 'Guardar Cambios'}</Button></DialogFooter>
+            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-blue-600 font-black uppercase h-11">{isSaving ? 'Guardando...' : 'Guardar Ficha'}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
