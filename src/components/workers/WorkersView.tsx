@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  Plus, Pencil, UserX, Search, Eye, EyeOff, Save, 
-  Loader2, FileText, UserCog, Printer
+  Plus, Pencil, UserX, Search, Eye, EyeOff, 
+  Loader2, Printer
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,11 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-// IMPORTAMOS EL COMPONENTE DE INFORME QUE USABA EL PANEL DE ADMIN
+// IMPORTANTE: Verifica que esta ruta sea correcta en tu estructura de carpetas
 import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
 
 export const WorkersView = () => {
@@ -32,8 +31,7 @@ export const WorkersView = () => {
     dni: '',
     position: '',
     role: 'worker',
-    workDayType: '8h',
-    password: ''
+    workDayType: '8h'
   });
 
   const { toast } = useToast();
@@ -63,7 +61,6 @@ export const WorkersView = () => {
     }
   };
 
-  // Informe General de toda la plantilla (Impresión nativa)
   const generateGeneralReport = () => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
@@ -105,7 +102,6 @@ export const WorkersView = () => {
     if (profile) {
       setEditingProfile(profile);
       setFormData({
-        ...formData,
         fullName: profile.full_name || '',
         dni: profile.dni || '',
         position: profile.position || '',
@@ -115,8 +111,7 @@ export const WorkersView = () => {
     } else {
       setEditingProfile(null);
       setFormData({
-        fullName: '', dni: '', position: '', role: 'worker', workDayType: '8h',
-        password: String(Math.floor(1000 + Math.random() * 9000))
+        fullName: '', dni: '', position: '', role: 'worker', workDayType: '8h'
       });
     }
     setIsDialogOpen(true);
@@ -127,13 +122,14 @@ export const WorkersView = () => {
     setIsSaving(true);
     try {
       if (editingProfile) {
-        await supabase.from('profiles').update({
+        const { error } = await supabase.from('profiles').update({
           full_name: formData.fullName,
           dni: formData.dni,
           position: formData.position,
           role: formData.role,
           work_day_type: formData.workDayType
         }).eq('id', editingProfile.id);
+        if (error) throw error;
       }
       toast({ title: 'Éxito', description: 'Datos actualizados' });
       loadData();
@@ -220,12 +216,33 @@ export const WorkersView = () => {
                   {p.work_day_type || '8h'}
                 </span>
               </TableCell>
-              
-              {/* AQUÍ ESTÁ EL CAMBIO: EL BOTÓN DE INFORME QUE QUERÍAS */}
               <TableCell className="py-4">
                 <MonthlyReportDialog profile={p} />
               </TableCell>
-
               <TableCell className="py-4 text-right">
                 <div className="flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => handleOpenDialog(p)} className="p-1.5 hover
+                  <button onClick={() => handleOpenDialog(p)} className="p-1.5 hover:bg-slate-800 rounded-md text-slate-400 hover:text-white"><Pencil className="h-4 w-4" /></button>
+                  <button className="p-1.5 hover:bg-red-500/10 rounded-md text-red-500/60 hover:text-red-500"><UserX className="h-4 w-4" /></button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="bg-slate-950 text-white border-slate-800">
+          <DialogHeader><DialogTitle className="uppercase font-black text-xl">Ficha Empleado</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+            <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-[#111] border-slate-800" /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">DNI</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-[#111] border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-[#111] border-slate-800" /></div>
+            </div>
+            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-blue-600 font-black uppercase h-11">{isSaving ? 'Guardando...' : 'Guardar Ficha'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
