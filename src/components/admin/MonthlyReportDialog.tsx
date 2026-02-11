@@ -206,8 +206,8 @@ export const MonthlyReportDialog = ({ profile }: MonthlyReportDialogProps) => {
                  <div className="info-grid text-sm text-left">
                     <div className="space-y-1">
                         <p className="text-xs uppercase text-gray-500 font-bold">Empresa</p>
-                        <p className="font-bold text-lg">AN STILE UNISEX S.L.</p> 
-                        <p className="text-sm">CIF: B-12345678</p> 
+                        <p className="font-bold text-lg">OFIMATIC BAIX S.L.</p> 
+                        <p className="text-sm">NIF: B-65836512</p> 
                     </div>
                     <div className="space-y-1 text-right">
                         <p className="text-xs uppercase text-gray-500 font-bold">Trabajador/a</p>
