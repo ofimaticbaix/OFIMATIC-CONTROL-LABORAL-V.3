@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const AuditDashboard = () => {
+// IMPORTANTE: El nombre debe ser AuditDashboard y debe tener 'export' antes de 'const'
+export const AuditDashboard = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,7 +63,8 @@ const AuditDashboard = () => {
 
   const filteredLogs = logs.filter(log => {
     const info = translateLog(log);
-    return info.desc.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase();
+    return info.desc.toLowerCase().includes(searchLower) || info.label.toLowerCase().includes(searchLower);
   });
 
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto h-10 w-10 text-blue-500" /></div>;
@@ -80,7 +82,7 @@ const AuditDashboard = () => {
 
       <Card className="bg-slate-900 border-slate-800 overflow-hidden">
         <div className="p-4 border-b border-slate-800">
-          <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-slate-900 border-slate-800 text-white text-xs" />
+          <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-slate-900 border-slate-800 text-white text-xs h-10" />
         </div>
         <Table>
           <TableHeader className="bg-slate-950">
@@ -113,5 +115,3 @@ const AuditDashboard = () => {
     </div>
   );
 };
-
-export default AuditDashboard; // Exportación por defecto para evitar fallos de Vercel
