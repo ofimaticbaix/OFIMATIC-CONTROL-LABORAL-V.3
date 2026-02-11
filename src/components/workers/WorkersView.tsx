@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-// IMPORTACIÓN CORREGIDA AQUÍ
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -56,8 +55,13 @@ export const WorkersView = () => {
       if (profError) throw profError;
       setProfiles(profilesData || []);
       setWorkerCredentials(credsData || []);
-    } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos.' });
+    } catch (err: any) {
+      console.error("Error cargando trabajadores:", err);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error de acceso', 
+        description: 'No tienes permisos para ver la lista de trabajadores.' 
+      });
     } finally {
       setLoading(false);
     }
@@ -65,8 +69,10 @@ export const WorkersView = () => {
 
   const filteredProfiles = profiles.filter(p => {
     const isActive = activeTab === 'active' ? (p.is_active !== false) : (p.is_active === false);
-    const matchesSearch = p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (p.dni && p.dni.toLowerCase().includes(searchTerm.toLowerCase()));
+    const name = p.full_name || '';
+    const dni = p.dni || '';
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         dni.toLowerCase().includes(searchTerm.toLowerCase());
     return isActive && matchesSearch;
   });
 
@@ -122,17 +128,22 @@ export const WorkersView = () => {
           await supabase.from('worker_credentials').insert({ user_id: data.user.id, access_code: formData.password });
         }
       }
-      toast({ title: 'Éxito', description: 'Datos guardados correctamente' });
+      toast({ title: 'Operación exitosa', description: 'Los datos se han guardado.' });
       loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
+      toast({ variant: 'destructive', title: 'Error al guardar', description: err.message });
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto h-10 w-10 text-blue-500" /></div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <Loader2 className="animate-spin h-10 w-10 text-blue-500" />
+      <p className="text-slate-500 font-bold uppercase text-xs tracking-widest italic text-center">Validando privilegios...</p>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -159,7 +170,7 @@ export const WorkersView = () => {
 
       <Tabs value={activeTab} onValueChange={(v:any) => setActiveTab(v)}>
         <TabsList className="bg-slate-900 border border-slate-800">
-          <TabsTrigger value="active" className="text-xs font-bold uppercase px-8">Activos</TabsTrigger>
+          <TabsTrigger value="active" className="text-xs font-bold uppercase px-8">Personal Activo</TabsTrigger>
           <TabsTrigger value="deactivated" className="text-xs font-bold uppercase px-8">Bajas</TabsTrigger>
         </TabsList>
 
@@ -167,39 +178,43 @@ export const WorkersView = () => {
           <Table>
             <TableHeader className="bg-slate-950">
               <TableRow className="border-slate-800">
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Trabajador</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Empleado</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Cargo / Rol</TableHead>
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN Acceso</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN Fichaje</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredProfiles.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-10 text-slate-500 italic uppercase text-xs">No hay trabajadores</TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-20 text-slate-600 font-bold uppercase text-xs italic tracking-widest">
+                    No hay trabajadores disponibles.
+                  </TableCell>
+                </TableRow>
               ) : filteredProfiles.map(p => (
                 <TableRow key={p.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
                   <TableCell className="p-4">
                     <div className="flex flex-col">
                       <span className="font-bold text-slate-100 flex items-center gap-2">
                         {p.full_name}
-                        {p.role === 'admin' && <ShieldAlert className="h-3 w-3 text-amber-500" title="Administrador" />}
+                        {p.role === 'admin' && <ShieldAlert className="h-3 w-3 text-amber-500" />}
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono">{p.dni || '---'}</span>
+                      <span className="text-[10px] text-slate-500 font-mono tracking-tighter">{p.dni || '---'}</span>
                     </div>
                   </TableCell>
                   <TableCell className="p-4">
                     <div className="flex flex-col gap-1">
                       <Badge variant="outline" className="text-[9px] font-bold uppercase border-slate-700 text-slate-300 w-fit">
-                        <Briefcase className="h-3 w-3 mr-1 text-blue-400" /> {p.position || '---'}
+                        <Briefcase className="h-3 w-3 mr-1 text-blue-400" /> {p.position || 'SIN CARGO'}
                       </Badge>
                       <Badge className={`${p.role === 'admin' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-800 text-slate-500'} text-[9px] font-black w-fit uppercase`}>{p.role}</Badge>
                     </div>
                   </TableCell>
                   <TableCell className="p-4 text-center">
-                    <div className="bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 inline-block font-mono font-black text-blue-400">
+                    <div className="bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 inline-block font-mono font-black text-blue-400 tracking-widest">
                       {visibleCodes[p.id] ? (workerCredentials.find(c => c.user_id === p.id)?.access_code || '****') : '****'}
                       <Button variant="ghost" size="icon" className="h-4 w-4 ml-2" onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))}>
-                         {visibleCodes[p.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                         {visibleCodes[p.id] ? <EyeOff className="h-3 w-3 text-slate-600" /> : <Eye className="h-3 w-3 text-slate-600" />}
                       </Button>
                     </div>
                   </TableCell>
@@ -207,20 +222,22 @@ export const WorkersView = () => {
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)} className="text-blue-500 hover:bg-blue-500/10"><Pencil className="h-4 w-4" /></Button>
                       <AlertDialog>
-                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent className="bg-slate-950 border-slate-800 text-white">
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="bg-slate-950 border-slate-800 text-white shadow-2xl">
                           <AlertDialogHeader>
-                            <AlertDialogTitle className="uppercase font-black text-xl">Confirmar Baja</AlertDialogTitle>
-                            <AlertDialogDescription className="text-slate-400">¿Desactivar a {p.full_name}?</AlertDialogDescription>
+                            <AlertDialogTitle className="uppercase font-black text-xl tracking-tighter">Baja de Personal</AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-400">¿Estás seguro de que quieres dar de baja a {p.full_name}?</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel className="bg-slate-900 border-slate-800">Cancelar</AlertDialogCancel>
                             <AlertDialogAction onClick={() => {
                               supabase.from('profiles').update({ is_active: false }).eq('id', p.id).then(() => {
-                                toast({ title: 'Trabajador desactivado' });
+                                toast({ title: 'Baja confirmada' });
                                 loadData();
                               });
-                            }} className="bg-red-600 hover:bg-red-700 font-bold uppercase text-xs">Desactivar</AlertDialogAction>
+                            }} className="bg-red-600 hover:bg-red-700 font-bold uppercase text-xs">Confirmar</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -236,7 +253,7 @@ export const WorkersView = () => {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl bg-slate-950 text-white border-slate-800 shadow-2xl">
           <DialogHeader className="border-b border-slate-900 pb-4 mb-4">
-            <DialogTitle className="uppercase font-black text-xl flex items-center gap-2">
+            <DialogTitle className="uppercase font-black text-xl tracking-tighter flex items-center gap-2">
               <UserCog className="text-blue-500 h-5 w-5" /> Ficha de Personal
             </DialogTitle>
           </DialogHeader>
@@ -251,7 +268,7 @@ export const WorkersView = () => {
                 <Label className="text-[10px] uppercase font-bold text-slate-500">Rol</Label>
                 <Select value={formData.role} onValueChange={(val) => setFormData({...formData, role: val})}>
                   <SelectTrigger className="bg-slate-900 border-slate-800"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                  <SelectContent className="bg-slate-900 border-slate-800 text-white font-bold text-[10px] uppercase">
                     <SelectItem value="worker">Trabajador</SelectItem>
                     <SelectItem value="admin">Administrador</SelectItem>
                   </SelectContent>
@@ -259,9 +276,9 @@ export const WorkersView = () => {
               </div>
             </div>
             <DialogFooter className="pt-2">
-              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 text-xs font-black uppercase tracking-widest h-11">
+              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-900/20 text-xs font-black uppercase tracking-widest h-11">
                 {isSaving ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />} 
-                {editingProfile ? 'Actualizar Ficha' : 'Crear Trabajador'}
+                {editingProfile ? 'Actualizar Ficha' : 'Dar de Alta'}
               </Button>
             </DialogFooter>
           </form>
