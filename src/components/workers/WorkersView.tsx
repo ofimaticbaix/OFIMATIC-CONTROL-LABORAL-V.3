@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+// IMPORTACIÓN CORREGIDA: Incluye DialogFooter
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -43,6 +44,7 @@ export const WorkersView = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      // Consulta directa a la base de datos
       const { data: profilesData, error: profError } = await supabase
         .from('profiles')
         .select('*')
@@ -53,10 +55,10 @@ export const WorkersView = () => {
         .select('user_id, access_code');
 
       if (profError) throw profError;
+      
       setProfiles(profilesData || []);
       setWorkerCredentials(credsData || []);
     } catch (err: any) {
-      console.error("Error cargando trabajadores:", err);
       toast({ 
         variant: 'destructive', 
         title: 'Error de acceso', 
@@ -69,10 +71,8 @@ export const WorkersView = () => {
 
   const filteredProfiles = profiles.filter(p => {
     const isActive = activeTab === 'active' ? (p.is_active !== false) : (p.is_active === false);
-    const name = p.full_name || '';
-    const dni = p.dni || '';
-    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         dni.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (p.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (p.dni || '').toLowerCase().includes(searchTerm.toLowerCase());
     return isActive && matchesSearch;
   });
 
@@ -115,9 +115,8 @@ export const WorkersView = () => {
         }).eq('id', editingProfile.id);
         if (error) throw error;
       } else {
-        const internalEmail = `${formData.dni.toLowerCase()}@ofimatic.com`;
         const { data, error: signUpError } = await supabase.auth.signUp({
-          email: internalEmail,
+          email: `${formData.dni.toLowerCase()}@ofimatic.com`,
           password: `worker_${formData.password}_${formData.dni}`,
         });
         if (signUpError) throw signUpError;
@@ -128,11 +127,11 @@ export const WorkersView = () => {
           await supabase.from('worker_credentials').insert({ user_id: data.user.id, access_code: formData.password });
         }
       }
-      toast({ title: 'Operación exitosa', description: 'Los datos se han guardado.' });
+      toast({ title: 'Éxito', description: 'Cambios guardados correctamente.' });
       loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error al guardar', description: err.message });
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
     } finally {
       setIsSaving(false);
     }
@@ -141,54 +140,43 @@ export const WorkersView = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4">
       <Loader2 className="animate-spin h-10 w-10 text-blue-500" />
-      <p className="text-slate-500 font-bold uppercase text-xs tracking-widest italic text-center">Validando privilegios...</p>
+      <p className="text-slate-500 font-bold uppercase text-[10px] tracking-widest italic">Verificando permisos de acceso...</p>
     </div>
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-black uppercase tracking-tighter text-white italic">Plantilla</h2>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Gestión de Personal</p>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Control de Personal OFIMATIC</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-            <Input 
-              placeholder="Buscar..." 
-              value={searchTerm} 
-              onChange={(e) => setSearchTerm(e.target.value)} 
-              className="pl-10 bg-slate-900 border-slate-800 text-white h-10"
-            />
-          </div>
-          <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-black uppercase text-xs tracking-widest h-10 px-6">
-            <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
-          </Button>
-        </div>
+        <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-black uppercase text-xs h-10 px-6">
+          <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v:any) => setActiveTab(v)}>
         <TabsList className="bg-slate-900 border border-slate-800">
-          <TabsTrigger value="active" className="text-xs font-bold uppercase px-8">Personal Activo</TabsTrigger>
-          <TabsTrigger value="deactivated" className="text-xs font-bold uppercase px-8">Bajas</TabsTrigger>
+          <TabsTrigger value="active" className="text-[10px] font-bold uppercase px-8">Personal Activo</TabsTrigger>
+          <TabsTrigger value="deactivated" className="text-[10px] font-bold uppercase px-8">Bajas</TabsTrigger>
         </TabsList>
 
         <Card className="bg-slate-900 border-slate-800 mt-4 overflow-hidden shadow-2xl">
           <Table>
             <TableHeader className="bg-slate-950">
               <TableRow className="border-slate-800">
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Empleado</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Trabajador</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Cargo / Rol</TableHead>
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN Fichaje</TableHead>
+                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN</TableHead>
                 <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredProfiles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-20 text-slate-600 font-bold uppercase text-xs italic tracking-widest">
-                    No hay trabajadores disponibles.
+                  <TableCell colSpan={4} className="text-center py-20 text-slate-600 font-bold uppercase text-xs italic">
+                    No hay trabajadores registrados con los permisos actuales.
                   </TableCell>
                 </TableRow>
               ) : filteredProfiles.map(p => (
@@ -205,13 +193,13 @@ export const WorkersView = () => {
                   <TableCell className="p-4">
                     <div className="flex flex-col gap-1">
                       <Badge variant="outline" className="text-[9px] font-bold uppercase border-slate-700 text-slate-300 w-fit">
-                        <Briefcase className="h-3 w-3 mr-1 text-blue-400" /> {p.position || 'SIN CARGO'}
+                        <Briefcase className="h-3 w-3 mr-1 text-blue-400" /> {p.position || '---'}
                       </Badge>
                       <Badge className={`${p.role === 'admin' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-800 text-slate-500'} text-[9px] font-black w-fit uppercase`}>{p.role}</Badge>
                     </div>
                   </TableCell>
                   <TableCell className="p-4 text-center">
-                    <div className="bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 inline-block font-mono font-black text-blue-400 tracking-widest">
+                    <div className="bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 inline-block font-mono font-black text-blue-400">
                       {visibleCodes[p.id] ? (workerCredentials.find(c => c.user_id === p.id)?.access_code || '****') : '****'}
                       <Button variant="ghost" size="icon" className="h-4 w-4 ml-2" onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))}>
                          {visibleCodes[p.id] ? <EyeOff className="h-3 w-3 text-slate-600" /> : <Eye className="h-3 w-3 text-slate-600" />}
@@ -222,22 +210,20 @@ export const WorkersView = () => {
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)} className="text-blue-500 hover:bg-blue-500/10"><Pencil className="h-4 w-4" /></Button>
                       <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button>
-                        </AlertDialogTrigger>
+                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button></AlertDialogTrigger>
                         <AlertDialogContent className="bg-slate-950 border-slate-800 text-white shadow-2xl">
                           <AlertDialogHeader>
-                            <AlertDialogTitle className="uppercase font-black text-xl tracking-tighter">Baja de Personal</AlertDialogTitle>
-                            <AlertDialogDescription className="text-slate-400">¿Estás seguro de que quieres dar de baja a {p.full_name}?</AlertDialogDescription>
+                            <AlertDialogTitle className="uppercase font-black text-xl">Baja de Personal</AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-400 text-sm">¿Deseas dar de baja a {p.full_name}?</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel className="bg-slate-900 border-slate-800">Cancelar</AlertDialogCancel>
+                            <AlertDialogCancel className="bg-slate-900 border-slate-800">No</AlertDialogCancel>
                             <AlertDialogAction onClick={() => {
                               supabase.from('profiles').update({ is_active: false }).eq('id', p.id).then(() => {
-                                toast({ title: 'Baja confirmada' });
+                                toast({ title: 'Baja realizada' });
                                 loadData();
                               });
-                            }} className="bg-red-600 hover:bg-red-700 font-bold uppercase text-xs">Confirmar</AlertDialogAction>
+                            }} className="bg-red-600 hover:bg-red-700 font-bold uppercase text-xs">Desactivar</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -253,7 +239,7 @@ export const WorkersView = () => {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl bg-slate-950 text-white border-slate-800 shadow-2xl">
           <DialogHeader className="border-b border-slate-900 pb-4 mb-4">
-            <DialogTitle className="uppercase font-black text-xl tracking-tighter flex items-center gap-2">
+            <DialogTitle className="uppercase font-black text-xl flex items-center gap-2 tracking-tighter">
               <UserCog className="text-blue-500 h-5 w-5" /> Ficha de Personal
             </DialogTitle>
           </DialogHeader>
@@ -265,9 +251,9 @@ export const WorkersView = () => {
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Cargo</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Rol</Label>
+                <Label className="text-[10px] uppercase font-bold text-slate-500">Rol Sistema</Label>
                 <Select value={formData.role} onValueChange={(val) => setFormData({...formData, role: val})}>
-                  <SelectTrigger className="bg-slate-900 border-slate-800"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-slate-900 border-slate-800 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white font-bold text-[10px] uppercase">
                     <SelectItem value="worker">Trabajador</SelectItem>
                     <SelectItem value="admin">Administrador</SelectItem>
@@ -276,7 +262,7 @@ export const WorkersView = () => {
               </div>
             </div>
             <DialogFooter className="pt-2">
-              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-900/20 text-xs font-black uppercase tracking-widest h-11">
+              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 font-black uppercase tracking-widest h-11">
                 {isSaving ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />} 
                 {editingProfile ? 'Actualizar Ficha' : 'Dar de Alta'}
               </Button>
