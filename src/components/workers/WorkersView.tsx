@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react';
 import { 
   Plus, Pencil, UserX, Search, Eye, EyeOff, Save, 
-  ShieldAlert, Loader2, UserCog, Briefcase
+  Loader2, FileText, UserCog
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-// IMPORTACIÓN CORREGIDA: Incluye DialogFooter
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { jsPDF } from 'jspdf'; // Asegúrate de instalarlo con: npm install jspdf
 
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -29,12 +26,12 @@ export const WorkersView = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const [formData, setFormData] = useState({
-    password: '',
     fullName: '',
     dni: '',
     position: '',
     role: 'worker',
-    dailyHours: '8'
+    workDayType: '8h',
+    password: ''
   });
 
   const { toast } = useToast();
@@ -44,36 +41,58 @@ export const WorkersView = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Consulta directa a la base de datos
       const { data: profilesData, error: profError } = await supabase
         .from('profiles')
         .select('*')
         .order('full_name', { ascending: true });
 
-      const { data: credsData, error: credError } = await supabase
-        .from('worker_credentials')
-        .select('user_id, access_code');
+      const { data: credsData } = await supabase.from('worker_credentials').select('user_id, access_code');
 
       if (profError) throw profError;
-      
       setProfiles(profilesData || []);
       setWorkerCredentials(credsData || []);
-    } catch (err: any) {
-      toast({ 
-        variant: 'destructive', 
-        title: 'Error de acceso', 
-        description: 'No tienes permisos para ver la lista de trabajadores.' 
-      });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Error al cargar los trabajadores' });
     } finally {
       setLoading(false);
     }
   };
 
+  // Función para generar el Informe PDF
+  const generateWorkerReport = (worker: any) => {
+    const doc = new jsPDF();
+    const pin = workerCredentials.find(c => c.user_id === worker.id)?.access_code || 'N/A';
+
+    // Estilo del PDF (Bauhaus/Ofimatic)
+    doc.setFillColor(15, 23, 42); // Fondo oscuro
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.text('OFIMATIC - FICHA DE PERSONAL', 20, 25);
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(12);
+    doc.text(`Nombre: ${worker.full_name}`, 20, 60);
+    doc.text(`DNI: ${worker.dni || 'No registrado'}`, 20, 70);
+    doc.text(`Puesto: ${worker.position || 'No especificado'}`, 20, 80);
+    doc.text(`Tipo de Jornada: ${worker.work_day_type || '8h'}`, 20, 90);
+    doc.text(`Clave de Acceso (PIN): ${pin}`, 20, 100);
+    
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, 110, 190, 110);
+    
+    doc.setFontSize(10);
+    doc.text(`Documento generado el: ${new Date().toLocaleString()}`, 20, 120);
+    
+    doc.save(`Informe_${worker.full_name.replace(' ', '_')}.pdf`);
+    
+    toast({ title: "Informe Generado", description: `Se ha descargado el PDF de ${worker.full_name}` });
+  };
+
   const filteredProfiles = profiles.filter(p => {
     const isActive = activeTab === 'active' ? (p.is_active !== false) : (p.is_active === false);
-    const matchesSearch = (p.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (p.dni || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return isActive && matchesSearch;
+    return isActive && p.full_name.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const handleOpenDialog = (profile?: any) => {
@@ -85,17 +104,13 @@ export const WorkersView = () => {
         dni: profile.dni || '',
         position: profile.position || '',
         role: profile.role || 'worker',
-        dailyHours: String(profile.daily_hours || '8')
+        workDayType: profile.work_day_type || '8h'
       });
     } else {
       setEditingProfile(null);
       setFormData({
-        password: String(Math.floor(1000 + Math.random() * 9000)),
-        fullName: '',
-        dni: '',
-        position: '',
-        role: 'worker',
-        dailyHours: '8'
+        fullName: '', dni: '', position: '', role: 'worker', workDayType: '8h',
+        password: String(Math.floor(1000 + Math.random() * 9000))
       });
     }
     setIsDialogOpen(true);
@@ -106,28 +121,15 @@ export const WorkersView = () => {
     setIsSaving(true);
     try {
       if (editingProfile) {
-        const { error } = await supabase.from('profiles').update({
+        await supabase.from('profiles').update({
           full_name: formData.fullName,
           dni: formData.dni,
           position: formData.position,
           role: formData.role,
-          daily_hours: parseFloat(formData.dailyHours)
+          work_day_type: formData.workDayType
         }).eq('id', editingProfile.id);
-        if (error) throw error;
-      } else {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email: `${formData.dni.toLowerCase()}@ofimatic.com`,
-          password: `worker_${formData.password}_${formData.dni}`,
-        });
-        if (signUpError) throw signUpError;
-        if (data.user) {
-          await supabase.from('profiles').update({ 
-            dni: formData.dni, position: formData.position, role: formData.role 
-          }).eq('id', data.user.id);
-          await supabase.from('worker_credentials').insert({ user_id: data.user.id, access_code: formData.password });
-        }
       }
-      toast({ title: 'Éxito', description: 'Cambios guardados correctamente.' });
+      toast({ title: 'Éxito', description: 'Datos actualizados' });
       loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
@@ -137,136 +139,116 @@ export const WorkersView = () => {
     }
   };
 
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4">
-      <Loader2 className="animate-spin h-10 w-10 text-blue-500" />
-      <p className="text-slate-500 font-bold uppercase text-[10px] tracking-widest italic">Verificando permisos de acceso...</p>
-    </div>
-  );
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin h-10 w-10 mx-auto text-blue-500" /></div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-3xl font-black uppercase tracking-tighter text-white italic">Plantilla</h2>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Control de Personal OFIMATIC</p>
+          <h2 className="text-2xl font-bold text-white">Gestión de Trabajadores</h2>
+          <p className="text-slate-400 text-sm">Alta, baja y modificación de empleados</p>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-black uppercase text-xs h-10 px-6">
-          <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
+        <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700 font-bold text-xs uppercase h-10 px-6 shadow-lg shadow-blue-900/20">
+          <Plus className="h-4 w-4 mr-2" /> Nuevo Trabajador
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v:any) => setActiveTab(v)}>
-        <TabsList className="bg-slate-900 border border-slate-800">
-          <TabsTrigger value="active" className="text-[10px] font-bold uppercase px-8">Personal Activo</TabsTrigger>
-          <TabsTrigger value="deactivated" className="text-[10px] font-bold uppercase px-8">Bajas</TabsTrigger>
-        </TabsList>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-[#111] border-slate-800"><CardContent className="p-6">
+          <p className="text-slate-500 text-xs font-bold uppercase">Total</p>
+          <p className="text-3xl font-bold text-white mt-1">{profiles.length}</p>
+        </CardContent></Card>
+        <Card className="bg-[#111] border-slate-800"><CardContent className="p-6">
+          <p className="text-slate-500 text-xs font-bold uppercase">Activos</p>
+          <p className="text-3xl font-bold text-emerald-500 mt-1">{profiles.filter(p => p.is_active !== false).length}</p>
+        </CardContent></Card>
+        <Card className="bg-[#111] border-slate-800"><CardContent className="p-6">
+          <p className="text-slate-500 text-xs font-bold uppercase">Desactivados</p>
+          <p className="text-3xl font-bold text-slate-500 mt-1">{profiles.filter(p => p.is_active === false).length}</p>
+        </CardContent></Card>
+      </div>
 
-        <Card className="bg-slate-900 border-slate-800 mt-4 overflow-hidden shadow-2xl">
-          <Table>
-            <TableHeader className="bg-slate-950">
-              <TableRow className="border-slate-800">
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Trabajador</TableHead>
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4">Cargo / Rol</TableHead>
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-center">PIN</TableHead>
-                <TableHead className="text-slate-500 font-black uppercase text-[10px] p-4 text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProfiles.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-20 text-slate-600 font-bold uppercase text-xs italic">
-                    No hay trabajadores registrados con los permisos actuales.
-                  </TableCell>
-                </TableRow>
-              ) : filteredProfiles.map(p => (
-                <TableRow key={p.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
-                  <TableCell className="p-4">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-100 flex items-center gap-2">
-                        {p.full_name}
-                        {p.role === 'admin' && <ShieldAlert className="h-3 w-3 text-amber-500" />}
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-mono tracking-tighter">{p.dni || '---'}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="p-4">
-                    <div className="flex flex-col gap-1">
-                      <Badge variant="outline" className="text-[9px] font-bold uppercase border-slate-700 text-slate-300 w-fit">
-                        <Briefcase className="h-3 w-3 mr-1 text-blue-400" /> {p.position || '---'}
-                      </Badge>
-                      <Badge className={`${p.role === 'admin' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-800 text-slate-500'} text-[9px] font-black w-fit uppercase`}>{p.role}</Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell className="p-4 text-center">
-                    <div className="bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 inline-block font-mono font-black text-blue-400">
-                      {visibleCodes[p.id] ? (workerCredentials.find(c => c.user_id === p.id)?.access_code || '****') : '****'}
-                      <Button variant="ghost" size="icon" className="h-4 w-4 ml-2" onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))}>
-                         {visibleCodes[p.id] ? <EyeOff className="h-3 w-3 text-slate-600" /> : <Eye className="h-3 w-3 text-slate-600" />}
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell className="p-4 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(p)} className="text-blue-500 hover:bg-blue-500/10"><Pencil className="h-4 w-4" /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><UserX className="h-4 w-4" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent className="bg-slate-950 border-slate-800 text-white shadow-2xl">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="uppercase font-black text-xl">Baja de Personal</AlertDialogTitle>
-                            <AlertDialogDescription className="text-slate-400 text-sm">¿Deseas dar de baja a {p.full_name}?</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="bg-slate-900 border-slate-800">No</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => {
-                              supabase.from('profiles').update({ is_active: false }).eq('id', p.id).then(() => {
-                                toast({ title: 'Baja realizada' });
-                                loadData();
-                              });
-                            }} className="bg-red-600 hover:bg-red-700 font-bold uppercase text-xs">Desactivar</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
-      </Tabs>
+      <div className="flex justify-between items-center mt-8">
+        <div className="flex bg-[#111] p-1 rounded-md border border-slate-800">
+          <button onClick={() => setActiveTab('active')} className={`px-4 py-1.5 text-xs font-bold rounded ${activeTab === 'active' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Activos</button>
+          <button onClick={() => setActiveTab('deactivated')} className={`px-4 py-1.5 text-xs font-bold rounded ${activeTab === 'deactivated' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Desactivados</button>
+        </div>
+        <div className="relative w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+          <Input placeholder="Buscar por nombre..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-transparent border-slate-800 pl-10 text-white text-sm focus:ring-blue-500/50" />
+        </div>
+      </div>
 
+      <Table className="mt-4">
+        <TableHeader className="border-b border-slate-800">
+          <TableRow className="hover:bg-transparent border-none">
+            <TableHead className="text-slate-500 font-bold text-xs uppercase">Nombre</TableHead>
+            <TableHead className="text-slate-500 font-bold text-xs uppercase">DNI</TableHead>
+            <TableHead className="text-slate-500 font-bold text-xs uppercase">Clave</TableHead>
+            <TableHead className="text-slate-500 font-bold text-xs uppercase text-center">Jornada</TableHead>
+            <TableHead className="text-slate-500 font-bold text-xs uppercase">Puesto</TableHead>
+            <TableHead className="text-slate-500 font-bold text-xs uppercase text-right">Acciones</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filteredProfiles.map(p => (
+            <TableRow key={p.id} className="border-slate-800/50 hover:bg-slate-800/20 group transition-colors">
+              <TableCell className="py-4 font-bold text-white text-sm">{p.full_name}</TableCell>
+              <TableCell className="py-4 text-slate-300 font-mono text-xs tracking-tighter">{p.dni || '---'}</TableCell>
+              <TableCell className="py-4">
+                <div className="flex items-center gap-2 text-slate-400 font-mono">
+                  {visibleCodes[p.id] ? (workerCredentials.find(c => c.user_id === p.id)?.access_code || '---') : '••••'}
+                  <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="hover:text-white transition-colors">
+                    {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </TableCell>
+              <TableCell className="py-4 text-center">
+                <span className={`px-4 py-1 rounded-full text-[10px] font-black border ${p.work_day_type === 'Personalizada' ? 'border-blue-500/50 text-blue-400 bg-blue-500/10' : 'border-slate-700 text-slate-400 bg-slate-800/50'}`}>
+                  {p.work_day_type || '8h'}
+                </span>
+              </TableCell>
+              <TableCell className="py-4 text-slate-300 text-sm">{p.position || '---'}</TableCell>
+              <TableCell className="py-4 text-right">
+                <div className="flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <Button 
+                    onClick={() => generateWorkerReport(p)}
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8 bg-transparent border-slate-700 text-[10px] font-bold text-white hover:bg-slate-800"
+                  >
+                    <FileText className="h-3.5 w-3.5 mr-2" /> Informe
+                  </Button>
+                  <button onClick={() => handleOpenDialog(p)} className="p-1.5 hover:bg-slate-800 rounded-md text-slate-400 hover:text-white transition-all"><Pencil className="h-4 w-4" /></button>
+                  <button className="p-1.5 hover:bg-red-500/10 rounded-md text-red-500/60 hover:text-red-500 transition-all"><UserX className="h-4 w-4" /></button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      
+      {/* Diálogo de Edición - El mismo que el anterior */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-xl bg-slate-950 text-white border-slate-800 shadow-2xl">
-          <DialogHeader className="border-b border-slate-900 pb-4 mb-4">
-            <DialogTitle className="uppercase font-black text-xl flex items-center gap-2 tracking-tighter">
-              <UserCog className="text-blue-500 h-5 w-5" /> Ficha de Personal
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Nombre</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">DNI / NIE</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-slate-900 border-slate-800" disabled={!!editingProfile} /></div>
+        <DialogContent className="bg-slate-950 text-white border-slate-800 shadow-2xl">
+          <DialogHeader><DialogTitle className="uppercase font-black text-xl tracking-tighter">Ficha de Personal</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+            <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-[#111] border-slate-800" /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">DNI</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-[#111] border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-slate-500 uppercase text-[10px] font-bold">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-[#111] border-slate-800" /></div>
             </div>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-slate-500">Cargo</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-slate-900 border-slate-800" /></div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-slate-500">Rol Sistema</Label>
-                <Select value={formData.role} onValueChange={(val) => setFormData({...formData, role: val})}>
-                  <SelectTrigger className="bg-slate-900 border-slate-800 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-white font-bold text-[10px] uppercase">
-                    <SelectItem value="worker">Trabajador</SelectItem>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-500 uppercase text-[10px] font-bold">Tipo de Jornada</Label>
+              <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
+                <SelectTrigger className="bg-[#111] border-slate-800"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-800 text-white font-bold uppercase text-[10px]">
+                  <SelectItem value="8h">8h (Estándar)</SelectItem>
+                  <SelectItem value="Personalizada">Personalizada</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <DialogFooter className="pt-2">
-              <Button type="submit" disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 font-black uppercase tracking-widest h-11">
-                {isSaving ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />} 
-                {editingProfile ? 'Actualizar Ficha' : 'Dar de Alta'}
-              </Button>
-            </DialogFooter>
+            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-blue-600 font-black uppercase tracking-widest h-11">{isSaving ? 'Actualizando...' : 'Guardar Cambios'}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
