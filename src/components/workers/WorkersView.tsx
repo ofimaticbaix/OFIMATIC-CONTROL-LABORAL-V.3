@@ -104,12 +104,9 @@ export const WorkersView = () => {
       const userEmail = `${cleanDni.toLowerCase()}@ofimatic.com`;
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
-      let userId = editingProfile?.id;
-
       if (!editingProfile) {
         // 🆕 NUEVA ALTA
         console.log('🔄 Iniciando creación de usuario...');
-        console.log('📧 Email:', userEmail);
         
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
@@ -124,58 +121,61 @@ export const WorkersView = () => {
 
         if (authError) {
           console.error('❌ Error en Auth:', authError);
-          if (authError.message?.includes('User already registered')) {
-            throw new Error('Este email ya existe. Ve a Supabase → Authentication y elimina el usuario: ' + userEmail);
-          }
-          throw authError;
+          throw new Error(authError.message.includes('User already registered') 
+            ? 'Email ya existe. Limpia auth.users en Supabase.' 
+            : authError.message
+          );
         }
 
-        userId = authData.user?.id;
-        if (!userId) throw new Error("No se pudo obtener el ID del usuario");
+        const userId = authData.user?.id;
+        if (!userId) throw new Error("No se pudo obtener ID de usuario");
 
-        console.log('✅ Usuario creado en Auth:', userId);
+        console.log('✅ Usuario creado:', userId);
 
-        // 📝 CREAR PERFIL (SIN .select().single())
-        console.log('📝 Creando perfil...');
+        // 📝 INSERTAR PERFIL - USANDO from().insert() DIRECTO
+        console.log('📝 Insertando perfil...');
+        
         const { error: profileError } = await supabase
           .from('profiles')
-          .insert({
+          .insert([{
             id: userId,
             full_name: formData.fullName,
             dni: cleanDni,
-            position: formData.position,
+            position: formData.position || null,
             role: formData.role,
             email: userEmail,
             work_day_type: formData.workDayType,
             daily_hours: parseFloat(formData.dailyHours),
             is_active: true
+          }], { 
+            defaultToNull: false
           });
 
         if (profileError) {
-          console.error('❌ Error creando perfil:', profileError);
-          throw new Error(`Error al crear perfil: ${profileError.message}`);
+          console.error('❌ Error en perfil:', profileError);
+          throw new Error(`Error creando perfil: ${profileError.message}`);
         }
 
-        console.log('✅ Perfil creado correctamente');
+        console.log('✅ Perfil creado');
 
-        // ⏳ Pausa breve para asegurar consistencia
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // 🔑 CREAR CREDENCIALES (SIN .select().single())
-        console.log('🔑 Creando credenciales...');
+        // 🔑 INSERTAR CREDENCIALES
+        console.log('🔑 Insertando credenciales...');
+        
         const { error: credsError } = await supabase
           .from('worker_credentials')
-          .insert({
+          .insert([{
             user_id: userId,
             access_code: formData.password
+          }], {
+            defaultToNull: false
           });
 
         if (credsError) {
-          console.error('❌ Error creando credenciales:', credsError);
-          throw new Error(`Error al crear credenciales: ${credsError.message}`);
+          console.error('❌ Error en credenciales:', credsError);
+          throw new Error(`Error creando credenciales: ${credsError.message}`);
         }
 
-        console.log('✅ Credenciales creadas correctamente');
+        console.log('✅ Credenciales creadas');
         console.log('🎉 TRABAJADOR CREADO EXITOSAMENTE');
 
       } else {
@@ -192,18 +192,31 @@ export const WorkersView = () => {
             work_day_type: formData.workDayType,
             daily_hours: parseFloat(formData.dailyHours)
           })
-          .eq('id', userId);
+          .eq('id', editingProfile.id);
 
-        if (profileError) throw new Error(`Error al actualizar: ${profileError.message}`);
+        if (profileError) throw profileError;
 
-        const { error: credsError } = await supabase
+        // Actualizar o crear credenciales
+        const { data: existingCreds } = await supabase
           .from('worker_credentials')
-          .upsert({
-            user_id: userId,
-            access_code: formData.password
-          });
+          .select('*')
+          .eq('user_id', editingProfile.id)
+          .maybeSingle();
 
-        if (credsError) throw new Error(`Error al actualizar credenciales: ${credsError.message}`);
+        if (existingCreds) {
+          const { error: updateError } = await supabase
+            .from('worker_credentials')
+            .update({ access_code: formData.password })
+            .eq('user_id', editingProfile.id);
+          
+          if (updateError) throw updateError;
+        } else {
+          const { error: insertError } = await supabase
+            .from('worker_credentials')
+            .insert([{ user_id: editingProfile.id, access_code: formData.password }]);
+          
+          if (insertError) throw insertError;
+        }
 
         console.log('✅ Trabajador actualizado');
       }
@@ -221,16 +234,10 @@ export const WorkersView = () => {
     } catch (err: any) {
       console.error('❌ ERROR:', err);
       
-      let errorMsg = err.message || 'Error desconocido';
-      
-      if (err.message?.includes('duplicate key')) {
-        errorMsg = 'Este DNI ya existe. Usa el botón "Editar" en la ficha del trabajador.';
-      }
-      
       toast({ 
         variant: 'destructive', 
         title: 'Error al guardar', 
-        description: errorMsg 
+        description: err.message || 'Error desconocido'
       });
     } finally {
       setIsSaving(false);
