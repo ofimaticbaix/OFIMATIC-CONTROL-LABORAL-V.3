@@ -13,7 +13,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
 
-// IMPORTANTE: Asegúrate de que diga "export const WorkersView"
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [workerCredentials, setWorkerCredentials] = useState<any[]>([]);
@@ -135,7 +134,7 @@ export const WorkersView = () => {
               return (
                 <TableRow 
                   key={p.id} 
-                  className="group transition-all duration-200 border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2"
+                  className="transition-colors border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2"
                   style={{ animationDelay: `${index * 40}ms` }}
                 >
                   <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
@@ -154,15 +153,14 @@ export const WorkersView = () => {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0">
-                      {/* Adaptación del componente de informe a modo adaptativo sin fondo */}
-                      <div className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center">
+                    <div className="flex justify-end gap-3 items-center">
+                      {/* Botones siempre visibles y adaptativos  */}
+                      <div className="text-muted-foreground hover:text-foreground transition-colors">
                         <MonthlyReportDialog profile={p} />
                       </div>
-                      {/* Botón de editar adaptativo */}
                       <button 
                         onClick={() => handleOpenDialog(p)} 
-                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                        className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-muted"
                         title="Editar trabajador"
                       >
                         <Pencil className="h-4 w-4" />
@@ -212,12 +210,12 @@ export const WorkersView = () => {
               </Select>
 
               {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border border-border">
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
                   <Clock className="text-primary h-5 w-5" />
                   <div className="flex-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Horas diarias (L-V)</Label><Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto text-foreground" /></div>
                 </div>
               ) : (
-                <div className="space-y-2.5 bg-muted/10 p-5 rounded-lg border border-border">
+                <div className="space-y-2.5 bg-muted/10 p-5 rounded-lg border">
                   {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
                     <div key={day} className="flex items-center justify-between gap-4 border-b last:border-0 pb-2.5 last:pb-0">
                       <span className="text-[10px] font-black uppercase text-muted-foreground w-16">{day}</span>
