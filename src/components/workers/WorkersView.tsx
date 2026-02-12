@@ -107,7 +107,9 @@ export const WorkersView = () => {
       let userId = editingProfile?.id;
 
       if (!editingProfile) {
-        // 🆕 NUEVA ALTA: Pasamos TODOS los datos en metadata para que el trigger los capture
+        // 🆕 NUEVA ALTA - El trigger creará el perfil automáticamente
+        console.log('🔄 Iniciando creación de usuario...');
+        
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
@@ -124,33 +126,34 @@ export const WorkersView = () => {
         });
 
         if (authError) {
-          // Detectar si el usuario ya existe
           if (authError.message?.includes('User already registered')) {
-            throw new Error('Este email ya está registrado. Si necesitas editarlo, búscalo en la lista y usa el botón de editar.');
+            throw new Error('Este DNI ya está registrado. Ve a Authentication en Supabase y elimina el usuario duplicado, o edita el trabajador existente.');
           }
           throw authError;
         }
 
         userId = authData.user?.id;
+        if (!userId) throw new Error("No se pudo obtener el ID del usuario creado");
 
-        if (!userId) {
-          throw new Error("No se pudo obtener el ID del usuario creado");
-        }
+        console.log('✅ Usuario creado en Auth:', userId);
 
-        // ⏳ Esperamos a que el trigger de Supabase procese el perfil
-        await new Promise(resolve => setTimeout(resolve, 800));
+        // ⏳ Esperar a que el trigger procese (importante)
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Verificamos que el perfil se haya creado correctamente
+        // Verificar que el perfil se creó
+        console.log('🔍 Verificando creación del perfil...');
         const { data: checkProfile, error: checkError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id, full_name')
           .eq('id', userId)
           .single();
 
         if (checkError || !checkProfile) {
-          console.error('El perfil no se creó automáticamente, creándolo manualmente...');
+          console.error('❌ El perfil NO se creó automáticamente');
+          console.error('Error del check:', checkError);
           
           // Fallback: Si el trigger falló, lo creamos manualmente
+          console.log('🔧 Intentando crear perfil manualmente...');
           const { error: manualProfileError } = await supabase
             .from('profiles')
             .insert({
@@ -164,10 +167,17 @@ export const WorkersView = () => {
               daily_hours: parseFloat(formData.dailyHours)
             });
 
-          if (manualProfileError) throw manualProfileError;
+          if (manualProfileError) {
+            console.error('❌ Error creando perfil manualmente:', manualProfileError);
+            throw new Error(`No se pudo crear el perfil: ${manualProfileError.message}`);
+          }
+          console.log('✅ Perfil creado manualmente');
+        } else {
+          console.log('✅ Perfil creado por trigger:', checkProfile);
         }
 
-        // Insertamos las credenciales (esto NO lo hace el trigger)
+        // 🔑 Crear credenciales (esto NO lo hace el trigger)
+        console.log('🔑 Creando credenciales...');
         const { error: credsError } = await supabase
           .from('worker_credentials')
           .insert({
@@ -175,10 +185,17 @@ export const WorkersView = () => {
             access_code: formData.password
           });
 
-        if (credsError) throw credsError;
+        if (credsError) {
+          console.error('❌ Error creando credenciales:', credsError);
+          throw new Error(`Error al crear credenciales: ${credsError.message}`);
+        }
+
+        console.log('✅ Credenciales creadas correctamente');
 
       } else {
         // ✏️ EDICIÓN: Actualizamos perfil existente
+        console.log('📝 Actualizando trabajador existente...');
+        
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -191,7 +208,10 @@ export const WorkersView = () => {
           })
           .eq('id', userId);
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('❌ Error actualizando perfil:', profileError);
+          throw new Error(`Error al actualizar: ${profileError.message}`);
+        }
 
         // Upsert de credenciales (crear o actualizar)
         const { error: credsError } = await supabase
@@ -201,21 +221,26 @@ export const WorkersView = () => {
             access_code: formData.password
           });
 
-        if (credsError) throw credsError;
+        if (credsError) {
+          console.error('❌ Error actualizando credenciales:', credsError);
+          throw new Error(`Error al actualizar credenciales: ${credsError.message}`);
+        }
+
+        console.log('✅ Trabajador actualizado correctamente');
       }
 
       toast({ 
         title: '✅ Éxito', 
         description: editingProfile 
           ? 'Trabajador actualizado correctamente' 
-          : 'Nuevo trabajador dado de alta con éxito' 
+          : 'Nuevo trabajador creado con éxito' 
       });
       
       await loadData();
       setIsDialogOpen(false);
       
     } catch (err: any) {
-      console.error('Error completo al guardar:', err);
+      console.error('❌ Error completo al guardar:', err);
       
       // 🔍 Mensajes de error mejorados
       let errorMsg = err.message || 'Error desconocido';
@@ -223,7 +248,7 @@ export const WorkersView = () => {
       if (err.message?.includes('duplicate key')) {
         errorMsg = 'Este DNI ya está registrado en el sistema. Usa el botón "Editar" en su ficha.';
       } else if (err.message?.includes('already registered')) {
-        errorMsg = 'El email ya existe. Ve a Authentication en Supabase para eliminarlo si es necesario.';
+        errorMsg = 'El email ya está registrado. Elimina el usuario en Authentication de Supabase.';
       } else if (err.message?.includes('violates')) {
         errorMsg = 'Error de base de datos. Verifica que las políticas RLS estén configuradas correctamente.';
       }
