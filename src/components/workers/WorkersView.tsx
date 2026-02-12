@@ -106,15 +106,20 @@ export const WorkersView = () => {
         if (credError) throw credError;
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // NUEVO ALTA CON UPSERT PARA EVITAR COLISIONES
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
           options: { data: { full_name: formData.fullName, role: formData.role } }
         });
 
-        if (authError) throw authError;
-        if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
+        if (authError) {
+          if (authError.message.includes("already registered")) {
+            throw new Error("Este usuario ya existe en Authentication. Bórralo allí primero.");
+          }
+          throw authError;
+        }
+
+        if (!authData.user) throw new Error("No se recibió respuesta del servidor.");
 
         const { error: profileInsertError } = await supabase.from('profiles').upsert({
           id: authData.user.id,
@@ -125,14 +130,14 @@ export const WorkersView = () => {
           email: userEmail,
           work_day_type: formData.workDayType,
           daily_hours: parseFloat(formData.dailyHours)
-        });
+        }, { onConflict: 'id' });
 
         if (profileInsertError) throw profileInsertError;
 
         const { error: credInsertError } = await supabase.from('worker_credentials').upsert({
           user_id: authData.user.id,
           access_code: formData.password
-        });
+        }, { onConflict: 'user_id' });
 
         if (credInsertError) throw credInsertError;
 
@@ -145,25 +150,29 @@ export const WorkersView = () => {
       toast({ 
         variant: 'destructive', 
         title: 'Error de Guardado', 
-        description: err.message || 'Error en la base de datos.' 
+        description: err.message || 'Fallo en la comunicación con la base de datos.' 
       });
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto h-10 w-10 text-primary" /></div>;
+  if (loading) return (
+    <div className="p-20 text-center flex flex-col items-center gap-4 text-foreground font-sans">
+      <Loader2 className="animate-spin h-10 w-10 text-primary" />
+      <p className="text-xs font-black uppercase tracking-widest opacity-70">Cargando trabajadores...</p>
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans text-foreground">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black uppercase italic tracking-tighter">Gestión de Trabajadores</h2>
-        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6">
+        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6 transition-transform hover:scale-105 active:scale-95">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
       </div>
 
-      {/* TABLA DE TRABAJADORES */}
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
@@ -204,7 +213,7 @@ export const WorkersView = () => {
                     <div className="[&_button]:text-black [&_button]:dark:text-white font-bold transition-opacity hover:opacity-70">
                       <MonthlyReportDialog profile={p} />
                     </div>
-                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full">
+                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full transition-all">
                       <Pencil className="h-4 w-4" />
                     </button>
                   </div>
@@ -248,7 +257,6 @@ export const WorkersView = () => {
               <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
               <Input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto focus-visible:ring-0" maxLength={4} />
             </div>
-            
             <div className="space-y-4 border-t pt-5">
               <Label className="text-[10px] font-black uppercase opacity-70">Configuración de la Jornada</Label>
               <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
@@ -259,9 +267,9 @@ export const WorkersView = () => {
                 </SelectContent>
               </Select>
 
-              {/* HORARIO PERSONALIZADO VISIBLE */}
+              {/* LÓGICA DE JORNADA PERSONALIZADA REINSTAURADA */}
               {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border animate-in fade-in duration-300">
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border animate-in fade-in zoom-in-95 duration-300">
                   <Clock className="text-primary h-5 w-5" />
                   <div className="flex-1">
                     <Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label>
