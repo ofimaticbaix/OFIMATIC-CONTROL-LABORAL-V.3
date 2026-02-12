@@ -13,7 +13,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
 
-// IMPORTANTE: Asegúrate de que diga "export const WorkersView"
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [workerCredentials, setWorkerCredentials] = useState<any[]>([]);
@@ -108,19 +107,24 @@ export const WorkersView = () => {
     } finally { setIsSaving(false); }
   };
 
-  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-blue-500" /></div>;
+  if (loading) return (
+    <div className="p-20 text-center flex flex-col items-center gap-4">
+      <Loader2 className="animate-spin h-10 w-10 text-primary" />
+      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cargando trabajadores...</p>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">Gestión de Trabajadores</h2>
-        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6">
+        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6 shadow-lg transition-transform hover:scale-105 active:scale-95">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
       </div>
 
-      {/* Tabla con colores adaptativos (Modo Claro/Oscuro) */}
-      <div className="rounded-lg border bg-card shadow-sm">
+      {/* Tabla con colores adaptativos y animación escalonada */}
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow className="hover:bg-transparent">
@@ -131,13 +135,17 @@ export const WorkersView = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {profiles.map(p => {
+            {profiles.map((p, index) => {
               const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
               return (
-                <TableRow key={p.id} className="group transition-colors border-b last:border-0">
+                <TableRow 
+                  key={p.id} 
+                  className="group transition-all duration-200 border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
                   <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
+                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit group-hover:border-primary/50 transition-colors">
                       <span className="font-mono font-bold text-primary text-sm">{visibleCodes[p.id] ? pin : '••••'}</span>
                       <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground transition-colors">
                         {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -151,9 +159,9 @@ export const WorkersView = () => {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0">
                       <MonthlyReportDialog profile={p} />
-                      <button onClick={() => handleOpenDialog(p)} className="p-2 hover:bg-muted rounded-full text-muted-foreground transition-colors"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => handleOpenDialog(p)} className="p-2 hover:bg-muted rounded-full text-muted-foreground hover:text-primary transition-colors shadow-sm"><Pencil className="h-4 w-4" /></button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -163,9 +171,8 @@ export const WorkersView = () => {
         </Table>
       </div>
 
-      {/* Formulario de Alta/Edición */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl bg-background border shadow-2xl animate-in zoom-in-95 duration-200">
           <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 pt-4">
             <div className="grid grid-cols-2 gap-4">
