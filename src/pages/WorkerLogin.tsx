@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Clock, ShieldCheck } from 'lucide-react';
+import { Clock, ShieldCheck, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
@@ -17,7 +17,6 @@ const WorkerLogin = () => {
   const [accessCode, setAccessCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [rateLimited, setRateLimited] = useState(false);
 
   useEffect(() => {
     if (user && !loading) {
@@ -26,83 +25,63 @@ const WorkerLogin = () => {
   }, [user, loading, navigate]);
 
   const handleLogin = async () => {
-    if (accessCode.length !== 4) {
-      setErrorMessage('Introduce tu clave de 4 dígitos');
-      return;
-    }
+    if (accessCode.length !== 4) return;
 
     setErrorMessage(null);
-
-    if (rateLimited) {
-      setErrorMessage('Demasiados intentos. Por favor espera 15 minutos.');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      // 1. BUSCAR EL CÓDIGO DIRECTAMENTE EN LA BASE DE DATOS
-      // Ya no usamos la función 'secure-auth', vamos directos a la tabla
+      // 1. BUSCAR EL CÓDIGO EN LA TABLA
       const { data: credential, error: credError } = await supabase
         .from('worker_credentials')
         .select('user_id')
         .eq('access_code', accessCode)
-        .single();
+        .maybeSingle();
 
       if (credError || !credential) {
-        setErrorMessage('Código incorrecto o usuario no encontrado.');
+        setErrorMessage('Código incorrecto o usuario no encontrado.'); //
         setIsSubmitting(false);
+        setAccessCode('');
         return;
       }
 
-      // 2. OBTENER EL PERFIL PARA SACAR EL EMAIL Y DNI
+      // 2. OBTENER EL PERFIL ASOCIADO
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('email, dni')
+        .select('email, dni, role')
         .eq('id', credential.user_id)
-        .single();
+        .maybeSingle();
 
-      if (profileError || !profile) {
-        setErrorMessage('Error al obtener datos del trabajador. Contacta al soporte.');
+      if (profileError || !profile || profile.role !== 'worker') {
+        setErrorMessage('Error al obtener datos del trabajador.');
         setIsSubmitting(false);
         return;
       }
 
-      if (!profile.dni) {
-        setErrorMessage('Este trabajador no tiene DNI asignado. Contacta al administrador.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 3. RECONSTRUIR LA CONTRASEÑA INTERNA
-      // La contraseña se genera automáticamente como worker_CODIGO_DNI
+      // 3. AUTENTICACIÓN (Usando el patrón de contraseña del sistema)
+      // Asegúrate de que este patrón coincida con el usado en el alta de trabajadores
       const authPassword = `worker_${accessCode}_${profile.dni}`;
 
-      // 4. INICIAR SESIÓN
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { error: authError } = await supabase.auth.signInWithPassword({
         email: profile.email,
         password: authPassword,
       });
 
       if (authError) {
-        console.error('Login error:', authError);
-        setErrorMessage('Error de autenticación. Verifica que el DNI y el código coincidan con el registro.');
+        console.error('Auth Error:', authError.message);
+        setErrorMessage('Error de validación. Contacte con el administrador.');
         setIsSubmitting(false);
+        setAccessCode('');
         return;
       }
 
-      // 5. ÉXITO
+      // 4. ÉXITO
       await refreshProfile();
-      
-      toast({
-        title: '¡Bienvenido!',
-        description: 'Has iniciado sesión correctamente.',
-      });
+      toast({ title: '¡Bienvenido!', description: 'Sesión iniciada correctamente.' });
       navigate('/');
 
     } catch (err) {
-      console.error('Unexpected error:', err);
-      setErrorMessage('Error inesperado. Inténtalo de nuevo.');
+      setErrorMessage('Error de conexión con el servidor.');
     } finally {
       setIsSubmitting(false);
     }
@@ -114,145 +93,96 @@ const WorkerLogin = () => {
     }
   }, [accessCode]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="relative">
-          <div className="h-16 w-16 bg-primary animate-pulse" />
-          <div className="absolute top-2 left-2 h-12 w-12 bg-accent animate-pulse delay-100" />
-          <div className="absolute top-4 left-4 h-8 w-8 bg-secondary animate-pulse delay-200" />
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+    </div>
+  );
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-background p-4 overflow-hidden">
-      {/* Bauhaus geometric background elements */}
-      <div className="absolute top-0 left-0 w-32 h-32 bg-primary opacity-10" />
-      <div className="absolute top-16 left-16 w-16 h-16 bg-accent opacity-20" />
-      <div className="absolute bottom-0 right-0 w-48 h-48 bg-secondary opacity-10" />
-      <div className="absolute bottom-24 right-24 w-24 h-24 bg-primary opacity-15" />
+      {/* Bauhaus background - Adaptado a Light Mode por defecto */}
+      <div className="absolute top-0 left-0 w-32 h-32 bg-primary/5" />
+      <div className="absolute bottom-0 right-0 w-48 h-48 bg-secondary/5" />
       
-      {/* Top accent bar */}
-      <div className="absolute top-0 left-0 right-0 h-1 flex">
-        <div className="flex-1 bg-primary" />
-        <div className="w-24 bg-accent" />
-        <div className="w-12 bg-secondary" />
+      {/* Theme toggle fijo en esquina */}
+      <div className="absolute top-6 right-6">
+        <ThemeToggle />
       </div>
 
-      {/* Theme toggle */}
-      <div className="absolute top-4 right-4">
-        <ThemeToggle className="bg-muted hover:bg-muted/80" />
-      </div>
-
-      <Card className="w-full max-w-md border-2 border-foreground/10 shadow-bauhaus-lg overflow-hidden">
-        {/* Card top accent */}
-        <div className="h-1 flex">
-          <div className="w-8 bg-secondary" />
-          <div className="w-16 bg-accent" />
-          <div className="flex-1 bg-primary" />
+      <Card className="w-full max-w-md border-2 border-foreground/5 shadow-2xl bg-card text-card-foreground overflow-hidden">
+        {/* Accent bar superior */}
+        <div className="h-1.5 flex">
+          <div className="w-1/3 bg-primary" />
+          <div className="w-1/3 bg-accent" />
+          <div className="w-1/3 bg-secondary" />
         </div>
 
-        <CardHeader className="text-center pt-8 pb-4">
-          {/* Bauhaus geometric logo */}
-          <div className="relative mx-auto mb-6">
-            <div className="h-20 w-20 bg-primary flex items-center justify-center shadow-bauhaus-primary">
-              <Clock className="h-10 w-10 text-primary-foreground" />
-            </div>
-            <div className="absolute -bottom-2 -right-2 h-6 w-6 bg-accent" />
-            <div className="absolute -top-2 -left-2 h-4 w-4 bg-secondary" />
+        <CardHeader className="text-center pt-10">
+          <div className="mx-auto mb-6 h-20 w-20 bg-primary flex items-center justify-center rounded-lg shadow-lg transition-transform hover:scale-105">
+            <Clock className="h-10 w-10 text-white" />
           </div>
-          
-          <CardTitle className="font-display text-2xl uppercase tracking-tight">
+          <CardTitle className="font-black text-2xl uppercase italic tracking-tighter text-foreground">
             Acceso Trabajador
           </CardTitle>
-          <CardDescription className="uppercase tracking-wider text-xs mt-2">
+          <CardDescription className="uppercase font-bold text-[10px] tracking-widest text-muted-foreground mt-2">
             Introduce tu clave de 4 dígitos
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-6 pb-8">
+        <CardContent className="space-y-8 pb-10">
           {errorMessage && (
-            <Alert variant="destructive" className="border-2">
-              <AlertDescription className="font-medium">{errorMessage}</AlertDescription>
+            <Alert variant="destructive" className="animate-in shake-1 duration-300">
+              <AlertDescription className="font-bold text-center text-xs uppercase">{errorMessage}</AlertDescription>
             </Alert>
           )}
 
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-6">
             <InputOTP
               maxLength={4}
               value={accessCode}
-              onChange={(value) => {
-                setAccessCode(value);
-                setErrorMessage(null);
-              }}
-              disabled={isSubmitting || rateLimited}
+              onChange={(v) => { setAccessCode(v); setErrorMessage(null); }}
+              disabled={isSubmitting}
             >
-              <InputOTPGroup className="gap-3">
-                <InputOTPSlot 
-                  index={0} 
-                  className="h-16 w-16 text-2xl font-display font-bold border-2 border-foreground/20 focus:border-primary" 
-                />
-                <InputOTPSlot 
-                  index={1} 
-                  className="h-16 w-16 text-2xl font-display font-bold border-2 border-foreground/20 focus:border-primary" 
-                />
-                <InputOTPSlot 
-                  index={2} 
-                  className="h-16 w-16 text-2xl font-display font-bold border-2 border-foreground/20 focus:border-primary" 
-                />
-                <InputOTPSlot 
-                  index={3} 
-                  className="h-16 w-16 text-2xl font-display font-bold border-2 border-foreground/20 focus:border-primary" 
-                />
+              <InputOTPGroup className="gap-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <InputOTPSlot 
+                    key={i} 
+                    index={i} 
+                    className="h-16 w-14 text-2xl font-black border-2 border-muted bg-muted/20 focus:border-primary focus:bg-background text-foreground transition-all rounded-md" 
+                  />
+                ))}
               </InputOTPGroup>
             </InputOTP>
 
             {isSubmitting && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <div className="h-4 w-4 bg-primary animate-pulse" />
-                <span className="font-display uppercase tracking-wider text-sm">Verificando...</span>
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Validando...</span>
               </div>
             )}
           </div>
 
-          {/* Geometric divider */}
           <div className="flex items-center gap-4 py-2">
             <div className="flex-1 h-px bg-border" />
-            <div className="h-2 w-2 bg-primary" />
+            <div className="h-1.5 w-1.5 bg-primary rotate-45" />
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <div className="text-center">
+          <div className="text-center space-y-4">
             <Link 
               to="/auth/admin" 
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider"
+              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2"
             >
               <ShieldCheck className="h-4 w-4" />
-              Acceso administrador
+              Acceso Administrador
             </Link>
+            <p className="text-[9px] text-muted-foreground/60 uppercase font-medium tracking-tight">
+              Protección de datos conforme al RGPD
+            </p>
           </div>
-
-          <p className="text-center text-[10px] text-muted-foreground uppercase tracking-wider">
-            Datos protegidos conforme al RGPD
-          </p>
         </CardContent>
-
-        {/* Card bottom accent */}
-        <div className="h-1 flex">
-          <div className="flex-1 bg-primary" />
-          <div className="w-16 bg-accent" />
-          <div className="w-8 bg-secondary" />
-        </div>
       </Card>
-
-      {/* Bottom accent bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 flex">
-        <div className="w-12 bg-secondary" />
-        <div className="w-24 bg-accent" />
-        <div className="flex-1 bg-primary" />
-      </div>
     </div>
   );
 };
