@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
 
+// IMPORTANTE: Asegúrate de que diga "export const WorkersView"
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [workerCredentials, setWorkerCredentials] = useState<any[]>([]);
@@ -107,23 +108,17 @@ export const WorkersView = () => {
     } finally { setIsSaving(false); }
   };
 
-  if (loading) return (
-    <div className="p-20 text-center flex flex-col items-center gap-4">
-      <Loader2 className="animate-spin h-10 w-10 text-primary" />
-      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cargando trabajadores...</p>
-    </div>
-  );
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-primary" /></div>;
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">Gestión de Trabajadores</h2>
-        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6 shadow-lg transition-transform hover:scale-105 active:scale-95">
+        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
       </div>
 
-      {/* Tabla con colores adaptativos y animación escalonada */}
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
@@ -141,11 +136,11 @@ export const WorkersView = () => {
                 <TableRow 
                   key={p.id} 
                   className="group transition-all duration-200 border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2"
-                  style={{ animationDelay: `${index * 50}ms` }}
+                  style={{ animationDelay: `${index * 40}ms` }}
                 >
                   <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit group-hover:border-primary/50 transition-colors">
+                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
                       <span className="font-mono font-bold text-primary text-sm">{visibleCodes[p.id] ? pin : '••••'}</span>
                       <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground transition-colors">
                         {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -159,9 +154,19 @@ export const WorkersView = () => {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0">
-                      <MonthlyReportDialog profile={p} />
-                      <button onClick={() => handleOpenDialog(p)} className="p-2 hover:bg-muted rounded-full text-muted-foreground hover:text-primary transition-colors shadow-sm"><Pencil className="h-4 w-4" /></button>
+                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0">
+                      {/* Adaptación del componente de informe a modo adaptativo sin fondo */}
+                      <div className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center">
+                        <MonthlyReportDialog profile={p} />
+                      </div>
+                      {/* Botón de editar adaptativo */}
+                      <button 
+                        onClick={() => handleOpenDialog(p)} 
+                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                        title="Editar trabajador"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -172,7 +177,7 @@ export const WorkersView = () => {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl bg-background border shadow-2xl animate-in zoom-in-95 duration-200">
+        <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 pt-4">
             <div className="grid grid-cols-2 gap-4">
@@ -207,12 +212,12 @@ export const WorkersView = () => {
               </Select>
 
               {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border border-border">
                   <Clock className="text-primary h-5 w-5" />
                   <div className="flex-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Horas diarias (L-V)</Label><Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto text-foreground" /></div>
                 </div>
               ) : (
-                <div className="space-y-2.5 bg-muted/10 p-5 rounded-lg border">
+                <div className="space-y-2.5 bg-muted/10 p-5 rounded-lg border border-border">
                   {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
                     <div key={day} className="flex items-center justify-between gap-4 border-b last:border-0 pb-2.5 last:pb-0">
                       <span className="text-[10px] font-black uppercase text-muted-foreground w-16">{day}</span>
