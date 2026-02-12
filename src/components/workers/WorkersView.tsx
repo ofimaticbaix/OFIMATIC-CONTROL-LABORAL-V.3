@@ -132,24 +132,20 @@ export const WorkersView = () => {
 
         console.log('✅ Usuario creado:', userId);
 
-        // 📝 INSERTAR PERFIL - USANDO from().insert() DIRECTO
+        // 📝 INSERTAR PERFIL - USANDO FUNCIÓN SQL
         console.log('📝 Insertando perfil...');
         
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([{
-            id: userId,
-            full_name: formData.fullName,
-            dni: cleanDni,
-            position: formData.position || null,
-            role: formData.role,
-            email: userEmail,
-            work_day_type: formData.workDayType,
-            daily_hours: parseFloat(formData.dailyHours),
-            is_active: true
-          }], { 
-            defaultToNull: false
-          });
+        const { error: profileError } = await supabase.rpc('insert_profile_direct', {
+          p_id: userId,
+          p_full_name: formData.fullName,
+          p_dni: cleanDni,
+          p_position: formData.position || null,
+          p_role: formData.role,
+          p_email: userEmail,
+          p_work_day_type: formData.workDayType,
+          p_daily_hours: parseFloat(formData.dailyHours),
+          p_is_active: true
+        });
 
         if (profileError) {
           console.error('❌ Error en perfil:', profileError);
@@ -158,17 +154,13 @@ export const WorkersView = () => {
 
         console.log('✅ Perfil creado');
 
-        // 🔑 INSERTAR CREDENCIALES
+        // 🔑 INSERTAR CREDENCIALES - USANDO FUNCIÓN SQL
         console.log('🔑 Insertando credenciales...');
         
-        const { error: credsError } = await supabase
-          .from('worker_credentials')
-          .insert([{
-            user_id: userId,
-            access_code: formData.password
-          }], {
-            defaultToNull: false
-          });
+        const { error: credsError } = await supabase.rpc('insert_credentials_direct', {
+          p_user_id: userId,
+          p_access_code: formData.password
+        });
 
         if (credsError) {
           console.error('❌ Error en credenciales:', credsError);
@@ -211,9 +203,10 @@ export const WorkersView = () => {
           
           if (updateError) throw updateError;
         } else {
-          const { error: insertError } = await supabase
-            .from('worker_credentials')
-            .insert([{ user_id: editingProfile.id, access_code: formData.password }]);
+          const { error: insertError } = await supabase.rpc('insert_credentials_direct', {
+            p_user_id: editingProfile.id,
+            p_access_code: formData.password
+          });
           
           if (insertError) throw insertError;
         }
