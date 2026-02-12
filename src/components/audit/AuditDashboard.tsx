@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Shield, RefreshCw, Search, Loader2, AlertCircle, UserCog, UserMinus, UserPlus, Calendar } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -94,7 +94,7 @@ export const AuditDashboard = () => {
         </Button>
       </div>
 
-      <Card className="bg-card border-border shadow-lg overflow-hidden transition-all">
+      <Card className="bg-card border-border shadow-lg overflow-hidden">
         <div className="p-4 border-b bg-muted/30">
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
@@ -129,7 +129,7 @@ export const AuditDashboard = () => {
                   <TableRow 
                     key={log.id} 
                     className="border-border hover:bg-muted/20 transition-all animate-in fade-in slide-in-from-left-2"
-                    style={{ animationDelay: `${index * 30}ms` }}
+                    style={{ animationDelay: `${index * 30}ms` }} // Efecto cascada
                   >
                     <TableCell className="p-4 font-mono text-[10px] text-foreground font-medium">
                       <div className="flex items-center gap-2">
