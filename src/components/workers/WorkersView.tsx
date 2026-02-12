@@ -79,19 +79,18 @@ export const WorkersView = () => {
     setIsSaving(true);
     
     try {
-      // Limpiamos espacios y formateamos datos técnicos
       const cleanDni = formData.dni.trim().toUpperCase();
       const userEmail = `${cleanDni.toLowerCase()}@ofimatic.com`;
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
       if (editingProfile) {
-        // LÓGICA DE ACTUALIZACIÓN
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
             full_name: formData.fullName,
             dni: cleanDni,
             position: formData.position,
+            role: formData.role,
             work_day_type: formData.workDayType,
             daily_hours: parseFloat(formData.dailyHours)
           })
@@ -108,28 +107,21 @@ export const WorkersView = () => {
 
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // LÓGICA DE NUEVO ALTA INTEGRAL
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
-          options: { 
-            data: { 
-              full_name: formData.fullName, 
-              role: 'worker' 
-            } 
-          }
+          options: { data: { full_name: formData.fullName, role: formData.role } }
         });
 
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
 
-        // Insertamos perfil y credenciales manualmente para asegurar sincronización
         const { error: profileInsertError } = await supabase.from('profiles').insert({
           id: authData.user.id,
           full_name: formData.fullName,
           dni: cleanDni,
           position: formData.position,
-          role: 'worker',
+          role: formData.role,
           email: userEmail,
           work_day_type: formData.workDayType,
           daily_hours: parseFloat(formData.dailyHours)
@@ -144,13 +136,12 @@ export const WorkersView = () => {
 
         if (credInsertError) throw credInsertError;
 
-        toast({ title: '¡Éxito!', description: 'Trabajador registrado en todas las tablas.' });
+        toast({ title: '¡Éxito!', description: 'Usuario registrado correctamente.' });
       }
 
       await loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
-      console.error("Error al guardar:", err);
       toast({ 
         variant: 'destructive', 
         title: 'Error de Guardado', 
@@ -180,7 +171,7 @@ export const WorkersView = () => {
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
-            <TableRow className="hover:bg-transparent border-b">
+            <TableRow className="hover:bg-transparent">
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Nombre</TableHead>
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">PIN de Acceso</TableHead>
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Puesto / Jornada</TableHead>
@@ -189,11 +180,16 @@ export const WorkersView = () => {
           </TableHeader>
           <TableBody>
             {profiles.map((p, index) => {
-              if (p.role === 'admin') return null;
+              // FILTRO ELIMINADO: Ahora el administrador vuelve a aparecer
               const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
               return (
                 <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${index * 40}ms` }}>
-                  <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
+                  <TableCell className="font-bold text-foreground py-5">
+                    <div className="flex flex-col">
+                      <span>{p.full_name}</span>
+                      {p.role === 'admin' && <span className="text-[8px] text-primary font-black uppercase tracking-widest">Admin</span>}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
                       <span className="font-mono font-bold text-primary text-sm">{visibleCodes[p.id] ? pin : '••••'}</span>
