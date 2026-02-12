@@ -43,6 +43,8 @@ export const WorkersView = () => {
       const { data: c } = await supabase.from('worker_credentials').select('*');
       setProfiles(p || []);
       setWorkerCredentials(c || []);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos.' });
     } finally {
       setLoading(false);
     }
@@ -80,25 +82,23 @@ export const WorkersView = () => {
       const userEmail = `${cleanDni.toLowerCase()}@ofimatic.com`;
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
-      let targetUserId = editingProfile?.id;
+      let userId = editingProfile?.id;
 
       if (!editingProfile) {
-        // ALTA EN AUTH
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
           options: { data: { full_name: formData.fullName, role: formData.role } }
         });
-
         if (authError) throw authError;
-        targetUserId = authData.user?.id;
+        userId = authData.user?.id;
       }
 
-      if (!targetUserId) throw new Error("No se pudo identificar al usuario.");
+      if (!userId) throw new Error("ID de usuario no identificado.");
 
-      // UPSERT PERFIL Y CREDENCIALES (Atómico)
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        id: targetUserId,
+      // Usamos UPSERT para evitar "Database error saving new user"
+      await supabase.from('profiles').upsert({
+        id: userId,
         full_name: formData.fullName,
         dni: cleanDni,
         position: formData.position,
@@ -108,32 +108,28 @@ export const WorkersView = () => {
         daily_hours: parseFloat(formData.dailyHours)
       });
 
-      if (profileError) throw profileError;
-
-      const { error: credError } = await supabase.from('worker_credentials').upsert({
-        user_id: targetUserId,
+      await supabase.from('worker_credentials').upsert({
+        user_id: userId,
         access_code: formData.password
       });
 
-      if (credError) throw credError;
-
-      toast({ title: 'Éxito', description: 'Cambios sincronizados correctamente.' });
+      toast({ title: 'Éxito', description: 'Datos sincronizados.' });
       await loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error de Base de Datos', description: err.message });
+      toast({ variant: 'destructive', title: 'Error de Guardado', description: err.message });
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin h-10 w-10 mx-auto text-primary" /></div>;
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto h-10 w-10 text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans text-foreground">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black uppercase italic tracking-tighter">Gestión de Trabajadores</h2>
-        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6 transition-transform hover:scale-105 active:scale-95">
+        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
       </div>
@@ -156,7 +152,7 @@ export const WorkersView = () => {
                   <TableCell className="font-bold py-5">
                     <div className="flex flex-col">
                       <span>{p.full_name}</span>
-                      {p.role === 'admin' && <span className="text-[8px] text-primary font-black uppercase tracking-widest">Admin</span>}
+                      {p.role === 'admin' && <span className="text-[8px] text-primary font-black uppercase tracking-widest">Administrador Ofimatic</span>}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -170,13 +166,13 @@ export const WorkersView = () => {
                   <TableCell>
                     <div className="text-[10px] font-bold uppercase space-y-0.5">
                       <p className="opacity-80">{p.position || '---'}</p>
-                      <p className="text-muted-foreground font-medium">{p.work_day_type === 'Estándar' ? `⏱️ ${p.daily_hours}h diarias` : '📅 Personalizada'}</p>
+                      <p className="text-muted-foreground">{p.work_day_type === 'Estándar' ? `⏱️ ${p.daily_hours}h/día` : '📅 Personalizada'}</p>
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-3 items-center">
                       <MonthlyReportDialog profile={p} />
-                      <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full transition-all">
+                      <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full">
                         <Pencil className="h-4 w-4" />
                       </button>
                     </div>
@@ -193,60 +189,52 @@ export const WorkersView = () => {
           <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 pt-4 text-foreground">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase opacity-70">Nombre Completo</Label><Input required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-muted/30 border-input" /></div>
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase opacity-70">DNI / NIE</Label><Input required value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30 border-input" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase opacity-70">Nombre Completo</Label><Input required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-muted/30" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase opacity-70">DNI / NIE</Label><Input required value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30" /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase opacity-70">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-muted/30 border-input" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase opacity-70">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-muted/30" /></div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">Tipo de Cuenta</Label>
                 <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v})}>
-                  <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-background border"><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent>
                 </Select>
               </div>
             </div>
             <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
-              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
+              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso</Label>
               <Input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto focus-visible:ring-0" maxLength={4} />
             </div>
 
             <div className="space-y-4 border-t pt-5">
               <Label className="text-[10px] font-black uppercase opacity-70">Configuración de la Jornada</Label>
               <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
-                <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-background border"><SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem><SelectItem value="Personalizada">Jornada Personalizada</SelectItem></SelectContent>
               </Select>
 
               {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border animate-in fade-in zoom-in-95 duration-300">
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border animate-in fade-in duration-300">
                   <Clock className="text-primary h-5 w-5" />
-                  <div className="flex-1">
-                    <Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label>
-                    <Input type="number" step="0.5" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto focus-visible:ring-0" />
-                  </div>
+                  <div className="flex-1"><Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label><Input type="number" step="0.5" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto focus-visible:ring-0" /></div>
                 </div>
               ) : (
-                <div className="space-y-3 bg-muted/10 p-5 rounded-lg border animate-in slide-in-from-top-2 duration-500">
-                  <p className="text-[9px] font-black uppercase tracking-tighter text-primary mb-2">Horario semanal detallado</p>
+                <div className="space-y-3 bg-muted/10 p-5 rounded-lg border animate-in slide-in-from-top-2">
                   {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
-                    <div key={day} className="flex items-center justify-between gap-4 border-b border-foreground/5 pb-2 last:border-0 last:pb-0">
+                    <div key={day} className="flex items-center justify-between border-b border-foreground/5 pb-2 last:border-0">
                       <span className="text-[10px] font-bold uppercase opacity-60 w-20">{day}</span>
                       <div className="flex items-center gap-2">
-                        <Input type="time" className="bg-background border-input h-8 text-[11px] font-bold w-24 px-2" defaultValue="09:00" />
-                        <span className="text-[10px] font-black opacity-30">→</span>
-                        <Input type="time" className="bg-background border-input h-8 text-[11px] font-bold w-24 px-2" defaultValue="18:00" />
+                        <Input type="time" className="bg-background h-8 text-[11px] font-bold w-24 px-2" defaultValue="09:00" />
+                        <span className="opacity-30">→</span>
+                        <Input type="time" className="bg-background h-8 text-[11px] font-bold w-24 px-2" defaultValue="18:00" />
                       </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-            <DialogFooter className="pt-2">
-              <Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg">
-                {isSaving ? <Loader2 className="animate-spin h-5 w-5 text-white" /> : 'Confirmar Cambios'}
-              </Button>
-            </DialogFooter>
+            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-primary font-black uppercase tracking-widest h-12 shadow-lg">{isSaving ? 'Guardando...' : 'Confirmar Cambios'}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
