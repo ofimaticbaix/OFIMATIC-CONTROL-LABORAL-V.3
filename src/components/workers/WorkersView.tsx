@@ -108,8 +108,6 @@ export const WorkersView = () => {
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
         // 2. NUEVO ALTA CON UPSERT (Evita el error de guardado duplicado)
-        
-        // Paso A: Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
@@ -123,7 +121,7 @@ export const WorkersView = () => {
           throw authError;
         }
 
-        if (!authData.user) throw new Error("No se recibió respuesta del servidor de autenticación.");
+        if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
 
         // Paso B: Profile con UPSERT (Sincroniza incluso si hay restos antiguos)
         const { error: profileInsertError } = await supabase.from('profiles').upsert({
@@ -147,7 +145,7 @@ export const WorkersView = () => {
 
         if (credInsertError) throw credInsertError;
 
-        toast({ title: '¡Éxito!', description: 'Trabajador registrado en todas las tablas.' });
+        toast({ title: '¡Éxito!', description: 'Trabajador registrado correctamente.' });
       }
 
       await loadData();
@@ -172,9 +170,9 @@ export const WorkersView = () => {
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 font-sans">
+    <div className="space-y-6 animate-in fade-in duration-500 font-sans text-foreground">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">Gestión de Trabajadores</h2>
+        <h2 className="text-xl font-black uppercase italic tracking-tighter">Gestión de Trabajadores</h2>
         <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6 transition-transform hover:scale-105 active:scale-95">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
@@ -193,7 +191,7 @@ export const WorkersView = () => {
           <TableBody>
             {profiles.map((p, index) => (
               <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${index * 40}ms` }}>
-                <TableCell className="font-bold text-foreground py-5">
+                <TableCell className="font-bold py-5">
                   <div className="flex flex-col">
                     <span>{p.full_name}</span>
                     {p.role === 'admin' && <span className="text-[8px] text-primary font-black uppercase tracking-widest">Admin</span>}
@@ -204,13 +202,13 @@ export const WorkersView = () => {
                     <span className="font-mono font-bold text-primary text-sm">
                       {visibleCodes[p.id] ? (workerCredentials.find(c => c.user_id === p.id)?.access_code || '----') : '••••'}
                     </span>
-                    <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground">
                       {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="text-[10px] font-bold uppercase space-y-0.5 text-foreground">
+                  <div className="text-[10px] font-bold uppercase space-y-0.5">
                     <p className="opacity-80">{p.position || '---'}</p>
                     <p className="text-muted-foreground font-medium">{p.work_day_type === 'Estándar' ? `⏱️ ${p.daily_hours}h diarias` : '📅 Personalizada'}</p>
                   </div>
@@ -220,7 +218,7 @@ export const WorkersView = () => {
                     <div className="[&_button]:text-black [&_button]:dark:text-white font-bold transition-opacity hover:opacity-70">
                       <MonthlyReportDialog profile={p} />
                     </div>
-                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full transition-all" title="Editar trabajador">
+                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full transition-all">
                       <Pencil className="h-4 w-4" />
                     </button>
                   </div>
@@ -236,45 +234,39 @@ export const WorkersView = () => {
           <DialogHeader>
             <DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+          <form onSubmit={handleSubmit} className="space-y-6 pt-4 text-foreground">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5 text-foreground">
+              <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">Nombre Completo</Label>
                 <Input required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-muted/30 border-input" />
               </div>
-              <div className="space-y-1.5 text-foreground">
+              <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">DNI / NIE</Label>
                 <Input required value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30 border-input" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5 text-foreground">
+              <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">Puesto</Label>
                 <Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-muted/30 border-input" />
               </div>
-              <div className="space-y-1.5 text-foreground">
+              <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">Tipo de Cuenta</Label>
                 <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v})}>
                   <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-background border">
-                    <SelectItem value="worker">Trabajador</SelectItem>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                  </SelectContent>
+                  <SelectContent className="bg-background border"><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg text-foreground">
+            <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
               <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
               <Input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto focus-visible:ring-0" maxLength={4} />
             </div>
-            <div className="space-y-4 border-t pt-5 text-foreground">
+            <div className="space-y-4 border-t pt-5">
               <Label className="text-[10px] font-black uppercase opacity-70">Configuración de la Jornada</Label>
               <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
                 <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-background border">
-                  <SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem>
-                  <SelectItem value="Personalizada">Jornada Personalizada</SelectItem>
-                </SelectContent>
+                <SelectContent className="bg-background border"><SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem><SelectItem value="Personalizada">Jornada Personalizada</SelectItem></SelectContent>
               </Select>
               <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
                 <Clock className="text-primary h-5 w-5" />
