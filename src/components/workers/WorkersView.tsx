@@ -13,6 +13,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
 
+// Definición de tipos para mayor robustez
+interface DaySchedule {
+  from: string;
+  to: string;
+  active: boolean;
+}
+
+interface Schedule {
+  [key: string]: DaySchedule;
+}
+
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [workerCredentials, setWorkerCredentials] = useState<any[]>([]);
@@ -22,6 +33,14 @@ export const WorkersView = () => {
   const [visibleCodes, setVisibleCodes] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
 
+  const initialSchedule: Schedule = {
+    monday: { from: '09:00', to: '18:00', active: true },
+    tuesday: { from: '09:00', to: '18:00', active: true },
+    wednesday: { from: '09:00', to: '18:00', active: true },
+    thursday: { from: '09:00', to: '18:00', active: true },
+    friday: { from: '09:00', to: '14:00', active: true },
+  };
+
   const [formData, setFormData] = useState({
     fullName: '',
     dni: '',
@@ -30,6 +49,7 @@ export const WorkersView = () => {
     workDayType: 'Estándar',
     dailyHours: '8',
     password: '',
+    schedule: initialSchedule
   });
 
   const { toast } = useToast();
@@ -43,6 +63,8 @@ export const WorkersView = () => {
       const { data: c } = await supabase.from('worker_credentials').select('*');
       setProfiles(p || []);
       setWorkerCredentials(c || []);
+    } catch (err) {
+      console.error("Error cargando datos:", err);
     } finally {
       setLoading(false);
     }
@@ -59,17 +81,29 @@ export const WorkersView = () => {
         role: profile.role || 'worker',
         workDayType: profile.work_day_type || 'Estándar',
         dailyHours: String(profile.daily_hours || '8'),
-        password: creds?.access_code || ''
+        password: creds?.access_code || '',
+        schedule: profile.schedule || initialSchedule
       });
     } else {
       setEditingProfile(null);
       const autoPin = String(Math.floor(1000 + Math.random() * 9000));
       setFormData({
         fullName: '', dni: '', position: '', role: 'worker', 
-        workDayType: 'Estándar', dailyHours: '8', password: autoPin
+        workDayType: 'Estándar', dailyHours: '8', password: autoPin,
+        schedule: initialSchedule
       });
     }
     setIsDialogOpen(true);
+  };
+
+  const handleScheduleChange = (day: string, type: 'from' | 'to', value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      schedule: {
+        ...prev.schedule,
+        [day]: { ...prev.schedule[day], [type]: value }
+      }
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,49 +114,46 @@ export const WorkersView = () => {
       const userEmail = `${cleanDni.toLowerCase()}@ofimatic.com`;
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
-      if (editingProfile) {
-        await supabase.from('profiles').update({
-          full_name: formData.fullName,
-          dni: cleanDni,
-          position: formData.position,
-          role: formData.role,
-          work_day_type: formData.workDayType,
-          daily_hours: parseFloat(formData.dailyHours)
-        }).eq('id', editingProfile.id);
+      let userId = editingProfile?.id;
 
-        await supabase.from('worker_credentials').update({ access_code: formData.password }).eq('user_id', editingProfile.id);
-        toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
-      } else {
+      if (!editingProfile) {
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
           options: { data: { full_name: formData.fullName, role: formData.role } }
         });
-
         if (authError) throw authError;
-
-        await supabase.from('profiles').upsert({
-          id: authData.user!.id,
-          full_name: formData.fullName,
-          dni: cleanDni,
-          position: formData.position,
-          role: formData.role,
-          email: userEmail,
-          work_day_type: formData.workDayType,
-          daily_hours: parseFloat(formData.dailyHours)
-        });
-
-        await supabase.from('worker_credentials').upsert({
-          user_id: authData.user!.id,
-          access_code: formData.password
-        });
-
-        toast({ title: '¡Éxito!', description: 'Usuario registrado correctamente.' });
+        userId = authData.user?.id;
       }
+
+      if (!userId) throw new Error("ID de usuario no encontrado.");
+
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: userId,
+        full_name: formData.fullName,
+        dni: cleanDni,
+        position: formData.position,
+        role: formData.role,
+        email: userEmail,
+        work_day_type: formData.workDayType,
+        daily_hours: parseFloat(formData.dailyHours),
+        schedule: formData.workDayType === 'Personalizada' ? formData.schedule : null
+      });
+
+      if (profileError) throw profileError;
+
+      const { error: credError } = await supabase.from('worker_credentials').upsert({
+        user_id: userId,
+        access_code: formData.password
+      });
+
+      if (credError) throw credError;
+
+      toast({ title: 'Éxito', description: 'Cambios guardados correctamente.' });
       await loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
+      toast({ variant: 'destructive', title: 'Error de Guardado', description: err.message });
     } finally {
       setIsSaving(false);
     }
@@ -150,14 +181,14 @@ export const WorkersView = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {profiles.map((p, index) => {
+            {profiles.map((p) => {
               const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
               return (
                 <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30">
                   <TableCell className="font-bold py-5">
                     <div className="flex flex-col">
                       <span>{p.full_name}</span>
-                      {p.role === 'admin' && <span className="text-[8px] text-primary font-black uppercase tracking-widest">Administrador</span>}
+                      {p.role === 'admin' && <span className="text-[8px] text-primary font-black uppercase tracking-widest">Admin</span>}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -175,7 +206,7 @@ export const WorkersView = () => {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-3 items-center font-bold">
+                    <div className="flex justify-end gap-3 items-center">
                       <MonthlyReportDialog profile={p} />
                       <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full">
                         <Pencil className="h-4 w-4" />
@@ -203,7 +234,10 @@ export const WorkersView = () => {
                 <Label className="text-[10px] font-bold uppercase opacity-70">Tipo de Cuenta</Label>
                 <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v})}>
                   <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-background border"><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent>
+                  <SelectContent className="bg-background border">
+                    <SelectItem value="worker">Trabajador</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
             </div>
@@ -216,30 +250,54 @@ export const WorkersView = () => {
               <Label className="text-[10px] font-black uppercase opacity-70">Configuración de la Jornada</Label>
               <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
                 <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-background border"><SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem><SelectItem value="Personalizada">Jornada Personalizada</SelectItem></SelectContent>
+                <SelectContent className="bg-background border">
+                  <SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem>
+                  <SelectItem value="Personalizada">Jornada Personalizada</SelectItem>
+                </SelectContent>
               </Select>
 
               {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border animate-in fade-in zoom-in-95 duration-300">
                   <Clock className="text-primary h-5 w-5" />
-                  <div className="flex-1"><Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label><Input type="number" step="0.5" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto focus-visible:ring-0" /></div>
+                  <div className="flex-1">
+                    <Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label>
+                    <Input type="number" step="0.5" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto focus-visible:ring-0" />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3 bg-muted/10 p-5 rounded-lg border animate-in slide-in-from-top-2">
-                  {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
-                    <div key={day} className="flex items-center justify-between border-b border-foreground/5 pb-2 last:border-0">
-                      <span className="text-[10px] font-bold uppercase opacity-60 w-20">{day}</span>
-                      <div className="flex items-center gap-2">
-                        <Input type="time" className="bg-background h-8 text-[11px] font-bold w-24" defaultValue="09:00" />
-                        <span className="opacity-30">→</span>
-                        <Input type="time" className="bg-background h-8 text-[11px] font-bold w-24" defaultValue="18:00" />
+                  <p className="text-[9px] font-black uppercase tracking-tighter text-primary mb-2">Horario semanal detallado</p>
+                  {(Object.keys(formData.schedule) as Array<keyof Schedule>).map((dayKey) => {
+                    const daysMap: Record<string, string> = { monday: 'Lunes', tuesday: 'Martes', wednesday: 'Miércoles', thursday: 'Jueves', friday: 'Viernes' };
+                    return (
+                      <div key={dayKey} className="flex items-center justify-between border-b border-foreground/5 pb-2 last:border-0">
+                        <span className="text-[10px] font-bold uppercase opacity-60 w-20">{daysMap[dayKey]}</span>
+                        <div className="flex items-center gap-2">
+                          <Input 
+                            type="time" 
+                            className="bg-background h-8 text-[11px] font-bold w-24 px-2" 
+                            value={formData.schedule[dayKey].from}
+                            onChange={(e) => handleScheduleChange(dayKey, 'from', e.target.value)}
+                          />
+                          <span className="opacity-30">→</span>
+                          <Input 
+                            type="time" 
+                            className="bg-background h-8 text-[11px] font-bold w-24 px-2" 
+                            value={formData.schedule[dayKey].to}
+                            onChange={(e) => handleScheduleChange(dayKey, 'to', e.target.value)}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
-            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-primary font-black uppercase tracking-widest h-12">{isSaving ? 'Guardando...' : 'Confirmar Cambios'}</Button></DialogFooter>
+            <DialogFooter>
+              <Button type="submit" disabled={isSaving} className="w-full bg-primary font-black uppercase tracking-widest h-12 shadow-lg">
+                {isSaving ? <Loader2 className="animate-spin h-5 w-5 text-white" /> : 'Confirmar Cambios'}
+              </Button>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
