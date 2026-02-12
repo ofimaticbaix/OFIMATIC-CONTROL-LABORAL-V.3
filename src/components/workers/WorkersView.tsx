@@ -99,8 +99,6 @@ export const WorkersView = () => {
         await supabase.from('profiles').update(payload).eq('id', editingProfile.id);
         await supabase.from('worker_credentials').update({ access_code: formData.password }).eq('user_id', editingProfile.id);
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
-      } else {
-        // Lógica de Registro (SignUp) aquí...
       }
       loadData();
       setIsDialogOpen(false);
@@ -114,105 +112,111 @@ export const WorkersView = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-black text-white uppercase italic">Gestión de Trabajadores</h2>
-        <Button onClick={() => handleOpenDialog()} className="bg-blue-600 font-bold uppercase text-[10px] px-6">
+        <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">Gestión de Trabajadores</h2>
+        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
       </div>
 
-      <Table className="bg-[#0a0a0a] border border-slate-800 rounded-lg">
-        <TableHeader>
-          <TableRow className="border-slate-800">
-            <TableHead className="text-slate-500 font-bold uppercase text-[10px]">Nombre</TableHead>
-            <TableHead className="text-slate-500 font-bold uppercase text-[10px]">PIN de Acceso</TableHead>
-            <TableHead className="text-slate-500 font-bold uppercase text-[10px]">Puesto / Jornada</TableHead>
-            <TableHead className="text-slate-500 font-bold uppercase text-[10px] text-right">Acciones</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {profiles.map(p => {
-            const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
-            return (
-              <TableRow key={p.id} className="border-slate-800 hover:bg-slate-800/20 group">
-                <TableCell className="font-bold text-white py-4">{p.full_name}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2 bg-slate-900 px-3 py-1 rounded border border-slate-800 w-fit">
-                    <span className="font-mono font-bold text-blue-400">{visibleCodes[p.id] ? pin : '••••'}</span>
-                    <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))}>
-                      {visibleCodes[p.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                    </button>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="text-[10px] font-bold uppercase">
-                    <p className="text-slate-300">{p.position || '---'}</p>
-                    <p className="text-slate-500">{p.work_day_type === 'Estándar' ? `${p.daily_hours}h diarias` : 'Personalizada'}</p>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <MonthlyReportDialog profile={p} />
-                    <button onClick={() => handleOpenDialog(p)} className="p-2 hover:bg-slate-700 rounded text-slate-400"><Pencil className="h-4 w-4" /></button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <div className="rounded-lg border bg-card shadow-sm">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Nombre</TableHead>
+              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">PIN de Acceso</TableHead>
+              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Puesto / Jornada</TableHead>
+              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12 text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {profiles.map(p => {
+              const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
+              return (
+                <TableRow key={p.id} className="group transition-colors border-b last:border-0">
+                  <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
+                      <span className="font-mono font-bold text-primary text-sm">{visibleCodes[p.id] ? pin : '••••'}</span>
+                      <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground transition-colors">
+                        {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-[10px] font-bold uppercase space-y-0.5">
+                      <p className="text-foreground/80">{p.position || '---'}</p>
+                      <p className="text-muted-foreground">{p.work_day_type === 'Estándar' ? `⏱️ ${p.daily_hours}h diarias` : '📅 Personalizada'}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MonthlyReportDialog profile={p} />
+                      <button onClick={() => handleOpenDialog(p)} className="p-2 hover:bg-muted rounded-full text-muted-foreground transition-colors"><Pencil className="h-4 w-4" /></button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl bg-slate-950 text-white border-slate-800 max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-black uppercase italic">Ficha de Personal</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 pt-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-slate-500">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-[#111] border-slate-800" /></div>
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-slate-500">DNI / NIE</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-[#111] border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-muted/30 border-input text-foreground" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-muted-foreground">DNI / NIE</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30 border-input text-foreground" /></div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-slate-500">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-[#111] border-slate-800" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-muted/30 border-input text-foreground" /></div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase text-slate-500">Tipo de Cuenta</Label>
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Tipo de Cuenta</Label>
                 <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v})}>
-                  <SelectTrigger className="bg-[#111] border-slate-800"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-slate-900 text-white"><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent>
+                  <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-background border"><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent>
                 </Select>
               </div>
             </div>
 
-            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-md">
-              <Label className="text-[10px] font-black uppercase text-blue-400">PIN de Acceso (Editable)</Label>
-              <Input value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-2xl font-mono font-black tracking-widest p-0 h-auto" maxLength={4} />
+            <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
+              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
+              <Input value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto text-foreground" maxLength={4} />
             </div>
 
-            <div className="space-y-4 border-t border-slate-900 pt-4">
-              <Label className="text-[10px] font-black uppercase text-slate-500">Configuración de la Jornada</Label>
+            <div className="space-y-4 border-t pt-5">
+              <Label className="text-[10px] font-black uppercase text-muted-foreground">Configuración de la Jornada</Label>
               <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
-                <SelectTrigger className="bg-[#111] border-slate-800"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-slate-900 text-white">
+                <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-background border">
                   <SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem>
                   <SelectItem value="Personalizada">Jornada Personalizada</SelectItem>
                 </SelectContent>
               </Select>
 
               {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-[#111] p-4 rounded-md border border-slate-800">
-                  <Clock className="text-blue-500 h-5 w-5" />
-                  <div className="flex-1"><Label className="text-[10px] font-bold uppercase text-slate-500">Horas diarias (L-V)</Label><Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-xl font-black p-0 h-auto" /></div>
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
+                  <Clock className="text-primary h-5 w-5" />
+                  <div className="flex-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Horas diarias (L-V)</Label><Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto text-foreground" /></div>
                 </div>
               ) : (
-                <div className="space-y-3 bg-[#111] p-4 rounded-md border border-slate-800">
+                <div className="space-y-2.5 bg-muted/10 p-5 rounded-lg border">
                   {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
-                    <div key={day} className="flex items-center justify-between gap-4 border-b border-slate-800/50 pb-2 last:border-0">
-                      <span className="text-[10px] font-black uppercase text-slate-400 w-16">{day}</span>
-                      <div className="flex items-center gap-2"><Input type="time" className="bg-slate-900 border-slate-800 h-8 text-xs font-bold w-24" defaultValue="09:00" /><span className="text-slate-600 text-[10px] font-bold">a</span><Input type="time" className="bg-slate-900 border-slate-800 h-8 text-xs font-bold w-24" defaultValue="18:00" /></div>
+                    <div key={day} className="flex items-center justify-between gap-4 border-b last:border-0 pb-2.5 last:pb-0">
+                      <span className="text-[10px] font-black uppercase text-muted-foreground w-16">{day}</span>
+                      <div className="flex items-center gap-2">
+                        <Input type="time" className="bg-background border-input h-8 text-xs font-bold w-28" defaultValue="09:00" />
+                        <span className="text-muted-foreground text-[10px] font-bold">a</span>
+                        <Input type="time" className="bg-background border-input h-8 text-xs font-bold w-28" defaultValue="18:00" />
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-            <DialogFooter><Button type="submit" disabled={isSaving} className="w-full bg-blue-600 font-black uppercase tracking-widest h-12">{isSaving ? 'Guardando...' : 'Confirmar Cambios'}</Button></DialogFooter>
+            <DialogFooter className="pt-2"><Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg">{isSaving ? 'Guardando...' : 'Confirmar Cambios'}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
