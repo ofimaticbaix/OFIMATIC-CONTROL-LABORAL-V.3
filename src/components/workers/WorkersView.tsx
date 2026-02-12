@@ -60,7 +60,7 @@ export const WorkersView = () => {
         position: profile.position || '',
         role: profile.role || 'worker',
         workDayType: profile.work_day_type || 'Estándar',
-        dailyHours: String(profile.daily_hours || '8'),
+        daily_hours: String(profile.daily_hours || '8'),
         password: creds?.access_code || ''
       });
     } else {
@@ -84,6 +84,7 @@ export const WorkersView = () => {
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
       if (editingProfile) {
+        // ACTUALIZACIÓN DE USUARIO
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -107,15 +108,24 @@ export const WorkersView = () => {
 
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
+        // NUEVO ALTA INTEGRAL
+        // Paso 1: Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
           options: { data: { full_name: formData.fullName, role: formData.role } }
         });
 
-        if (authError) throw authError;
-        if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
+        if (authError) {
+          if (authError.message.includes("already registered")) {
+            throw new Error("Este DNI/Email ya está en uso. Por favor, elimínalo primero de la pestaña Authentication en Supabase.");
+          }
+          throw authError;
+        }
 
+        if (!authData.user) throw new Error("Error en la respuesta del servidor de autenticación.");
+
+        // Paso 2: Profile
         const { error: profileInsertError } = await supabase.from('profiles').insert({
           id: authData.user.id,
           full_name: formData.fullName,
@@ -129,6 +139,7 @@ export const WorkersView = () => {
 
         if (profileInsertError) throw profileInsertError;
 
+        // Paso 3: Credentials
         const { error: credInsertError } = await supabase.from('worker_credentials').insert({
           user_id: authData.user.id,
           access_code: formData.password
@@ -136,16 +147,17 @@ export const WorkersView = () => {
 
         if (credInsertError) throw credInsertError;
 
-        toast({ title: '¡Éxito!', description: 'Usuario registrado correctamente.' });
+        toast({ title: '¡Éxito!', description: 'Usuario creado y registrado correctamente.' });
       }
 
       await loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
+      console.error("Error detallado:", err);
       toast({ 
         variant: 'destructive', 
         title: 'Error de Guardado', 
-        description: err.message || 'Error en la base de datos.' 
+        description: err.message || 'Fallo en la comunicación con la base de datos.' 
       });
     } finally {
       setIsSaving(false);
@@ -153,9 +165,9 @@ export const WorkersView = () => {
   };
 
   if (loading) return (
-    <div className="p-20 text-center flex flex-col items-center gap-4 text-foreground">
+    <div className="p-20 text-center flex flex-col items-center gap-4">
       <Loader2 className="animate-spin h-10 w-10 text-primary" />
-      <p className="text-xs font-black uppercase tracking-widest opacity-70">Cargando trabajadores...</p>
+      <p className="text-xs font-black uppercase tracking-widest opacity-70">Cargando gestión...</p>
     </div>
   );
 
@@ -163,7 +175,7 @@ export const WorkersView = () => {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">Gestión de Trabajadores</h2>
-        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6 transition-transform hover:scale-105 active:scale-95">
+        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
       </div>
@@ -180,10 +192,9 @@ export const WorkersView = () => {
           </TableHeader>
           <TableBody>
             {profiles.map((p, index) => {
-              // FILTRO ELIMINADO: Ahora el administrador vuelve a aparecer
               const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
               return (
-                <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${index * 40}ms` }}>
+                <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30" style={{ animationDelay: `${index * 40}ms` }}>
                   <TableCell className="font-bold text-foreground py-5">
                     <div className="flex flex-col">
                       <span>{p.full_name}</span>
@@ -209,7 +220,7 @@ export const WorkersView = () => {
                       <div className="[&_button]:text-black [&_button]:dark:text-white font-bold transition-opacity hover:opacity-70">
                         <MonthlyReportDialog profile={p} />
                       </div>
-                      <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full transition-all">
+                      <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full">
                         <Pencil className="h-4 w-4" />
                       </button>
                     </div>
