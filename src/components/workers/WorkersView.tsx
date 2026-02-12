@@ -1,100 +1,232 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '@/components/ui/table';
+  Plus, Pencil, UserX, Search, Eye, EyeOff, Save, 
+  Loader2, Lock, Clock, CalendarDays 
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Pencil, FileText, Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { MonthlyReportDialog } from './MonthlyReportDialog';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
 
-export const AdministracionView = () => {
-  const [entries, setEntries] = useState<any[]>([]);
+// IMPORTANTE: Asegúrate de que diga "export const WorkersView"
+export const WorkersView = () => {
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [workerCredentials, setWorkerCredentials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [visibleCodes, setVisibleCodes] = useState<Record<string, boolean>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    fetchEntries();
-  }, []);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    dni: '',
+    position: '',
+    role: 'worker',
+    workDayType: 'Estándar',
+    dailyHours: '8',
+    password: '',
+    schedule: {
+      monday: { from: '09:00', to: '18:00', active: true },
+      tuesday: { from: '09:00', to: '18:00', active: true },
+      wednesday: { from: '09:00', to: '18:00', active: true },
+      thursday: { from: '09:00', to: '18:00', active: true },
+      friday: { from: '09:00', to: '14:00', active: true },
+    }
+  });
 
-  const fetchEntries = async () => {
+  const { toast } = useToast();
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('time_entries')
-      .select(`
-        *,
-        profiles:user_id (full_name)
-      `)
-      .order('date', { ascending: false });
-    
-    if (!error) setEntries(data || []);
-    setLoading(false);
+    try {
+      const { data: p } = await supabase.from('profiles').select('*').order('full_name');
+      const { data: c } = await supabase.from('worker_credentials').select('*');
+      setProfiles(p || []);
+      setWorkerCredentials(c || []);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const handleOpenDialog = (profile?: any) => {
+    if (profile) {
+      const creds = workerCredentials.find(c => c.user_id === profile.id);
+      setEditingProfile(profile);
+      setFormData({
+        ...formData,
+        fullName: profile.full_name || '',
+        dni: profile.dni || '',
+        position: profile.position || '',
+        role: profile.role || 'worker',
+        workDayType: profile.work_day_type || 'Estándar',
+        dailyHours: String(profile.daily_hours || '8'),
+        password: creds?.access_code || ''
+      });
+    } else {
+      setEditingProfile(null);
+      const autoPin = String(Math.floor(1000 + Math.random() * 9000));
+      setFormData({
+        fullName: '', dni: '', position: '', role: 'worker', 
+        workDayType: 'Estándar', dailyHours: '8', password: autoPin,
+        schedule: formData.schedule
+      });
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const payload = {
+        full_name: formData.fullName,
+        dni: formData.dni,
+        position: formData.position,
+        role: formData.role,
+        work_day_type: formData.workDayType,
+        daily_hours: parseFloat(formData.dailyHours)
+      };
+
+      if (editingProfile) {
+        await supabase.from('profiles').update(payload).eq('id', editingProfile.id);
+        await supabase.from('worker_credentials').update({ access_code: formData.password }).eq('user_id', editingProfile.id);
+        toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
+      }
+      loadData();
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally { setIsSaving(false); }
+  };
+
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-blue-500" /></div>;
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">
-          Historial de Fichajes
-        </h2>
+        <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">Gestión de Trabajadores</h2>
+        <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6">
+          <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
+        </Button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input 
-          placeholder="Buscar por trabajador..." 
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="bg-background border-input pl-10"
-        />
-      </div>
-
-      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+      {/* Tabla con colores adaptativos (Modo Claro/Oscuro) */}
+      <div className="rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/50">
-            <TableRow className="hover:bg-transparent border-b">
-              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Trabajador</TableHead>
-              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Fecha</TableHead>
-              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Entrada/Salida</TableHead>
-              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Horas</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Nombre</TableHead>
+              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">PIN de Acceso</TableHead>
+              <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Puesto / Jornada</TableHead>
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12 text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
-            ) : entries.map((entry) => (
-              <TableRow key={entry.id} className="group transition-colors border-b last:border-0">
-                <TableCell className="font-bold text-foreground py-4">
-                  {entry.profiles?.full_name || 'Desconocido'}
-                </TableCell>
-                <TableCell className="text-muted-foreground font-medium">
-                  {new Date(entry.date).toLocaleDateString('es-ES')}
-                </TableCell>
-                <TableCell className="font-mono text-xs">
-                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                    {entry.clock_in ? new Date(entry.clock_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
-                  </span>
-                  <span className="mx-2 text-muted-foreground">/</span>
-                  <span className="text-rose-600 dark:text-rose-400 font-bold">
-                    {entry.clock_out ? new Date(entry.clock_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-black">
-                    {entry.hours_worked ? `${entry.hours_worked.toFixed(2)}h` : '0h'}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {profiles.map(p => {
+              const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
+              return (
+                <TableRow key={p.id} className="group transition-colors border-b last:border-0">
+                  <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
+                      <span className="font-mono font-bold text-primary text-sm">{visibleCodes[p.id] ? pin : '••••'}</span>
+                      <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground transition-colors">
+                        {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-[10px] font-bold uppercase space-y-0.5">
+                      <p className="text-foreground/80">{p.position || '---'}</p>
+                      <p className="text-muted-foreground">{p.work_day_type === 'Estándar' ? `⏱️ ${p.daily_hours}h diarias` : '📅 Personalizada'}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MonthlyReportDialog profile={p} />
+                      <button onClick={() => handleOpenDialog(p)} className="p-2 hover:bg-muted rounded-full text-muted-foreground transition-colors"><Pencil className="h-4 w-4" /></button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
+
+      {/* Formulario de Alta/Edición */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Nombre Completo</Label><Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-muted/30 border-input text-foreground" /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-muted-foreground">DNI / NIE</Label><Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30 border-input text-foreground" /></div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Puesto</Label><Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-muted/30 border-input text-foreground" /></div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Tipo de Cuenta</Label>
+                <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v})}>
+                  <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-background border"><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
+              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
+              <Input value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto text-foreground" maxLength={4} />
+            </div>
+
+            <div className="space-y-4 border-t pt-5">
+              <Label className="text-[10px] font-black uppercase text-muted-foreground">Configuración de la Jornada</Label>
+              <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
+                <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-background border">
+                  <SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem>
+                  <SelectItem value="Personalizada">Jornada Personalizada</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {formData.workDayType === 'Estándar' ? (
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
+                  <Clock className="text-primary h-5 w-5" />
+                  <div className="flex-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Horas diarias (L-V)</Label><Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto text-foreground" /></div>
+                </div>
+              ) : (
+                <div className="space-y-2.5 bg-muted/10 p-5 rounded-lg border">
+                  {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
+                    <div key={day} className="flex items-center justify-between gap-4 border-b last:border-0 pb-2.5 last:pb-0">
+                      <span className="text-[10px] font-black uppercase text-muted-foreground w-16">{day}</span>
+                      <div className="flex items-center gap-2">
+                        <Input type="time" className="bg-background border-input h-8 text-xs font-bold w-28" defaultValue="09:00" />
+                        <span className="text-muted-foreground text-[10px] font-bold">a</span>
+                        <Input type="time" className="bg-background border-input h-8 text-xs font-bold w-28" defaultValue="18:00" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg">
+                {isSaving ? 'Guardando...' : 'Confirmar Cambios'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
