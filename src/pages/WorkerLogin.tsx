@@ -31,7 +31,7 @@ const WorkerLogin = () => {
     setIsSubmitting(true);
 
     try {
-      // 1. BUSCAR EL CÓDIGO EN LA TABLA
+      // 1. BUSCAR EL CÓDIGO (Usamos rpc o consulta directa asegurando que RLS lo permita)
       const { data: credential, error: credError } = await supabase
         .from('worker_credentials')
         .select('user_id')
@@ -50,16 +50,16 @@ const WorkerLogin = () => {
         .from('profiles')
         .select('email, dni, role')
         .eq('id', credential.user_id)
-        .maybeSingle();
+        .single();
 
-      if (profileError || !profile || profile.role !== 'worker') {
-        setErrorMessage('Error al obtener datos del trabajador.');
+      if (profileError || !profile) {
+        setErrorMessage('Error al verificar el perfil del trabajador.');
         setIsSubmitting(false);
         return;
       }
 
-      // 3. AUTENTICACIÓN (Usando el patrón de contraseña del sistema)
-      // Asegúrate de que este patrón coincida con el usado en el alta de trabajadores
+      // 3. AUTENTICACIÓN
+      // La clave generada debe ser IDÉNTICA a la usada en el registro (DNI: 1245678)
       const authPassword = `worker_${accessCode}_${profile.dni}`;
 
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -68,20 +68,18 @@ const WorkerLogin = () => {
       });
 
       if (authError) {
-        console.error('Auth Error:', authError.message);
-        setErrorMessage('Error de validación. Contacte con el administrador.');
+        setErrorMessage('Error de autenticación. Contacte al administrador.');
         setIsSubmitting(false);
         setAccessCode('');
         return;
       }
 
-      // 4. ÉXITO
       await refreshProfile();
-      toast({ title: '¡Bienvenido!', description: 'Sesión iniciada correctamente.' });
+      toast({ title: '¡Bienvenido!', description: 'Has iniciado sesión correctamente.' });
       navigate('/');
 
     } catch (err) {
-      setErrorMessage('Error de conexión con el servidor.');
+      setErrorMessage('Error inesperado de conexión.');
     } finally {
       setIsSubmitting(false);
     }
@@ -100,89 +98,90 @@ const WorkerLogin = () => {
   );
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-background p-4 overflow-hidden">
-      {/* Bauhaus background - Adaptado a Light Mode por defecto */}
-      <div className="absolute top-0 left-0 w-32 h-32 bg-primary/5" />
-      <div className="absolute bottom-0 right-0 w-48 h-48 bg-secondary/5" />
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4 overflow-hidden font-sans">
+      {/* Bauhaus background */}
+      <div className="absolute top-0 left-0 w-32 h-32 bg-primary/5 animate-pulse" />
+      <div className="absolute bottom-0 right-0 w-48 h-48 bg-secondary/5 animate-pulse delay-700" />
       
-      {/* Theme toggle fijo en esquina */}
       <div className="absolute top-6 right-6">
         <ThemeToggle />
       </div>
 
-      <Card className="w-full max-w-md border-2 border-foreground/5 shadow-2xl bg-card text-card-foreground overflow-hidden">
-        {/* Accent bar superior */}
-        <div className="h-1.5 flex">
-          <div className="w-1/3 bg-primary" />
-          <div className="w-1/3 bg-accent" />
-          <div className="w-1/3 bg-secondary" />
-        </div>
-
-        <CardHeader className="text-center pt-10">
-          <div className="mx-auto mb-6 h-20 w-20 bg-primary flex items-center justify-center rounded-lg shadow-lg transition-transform hover:scale-105">
-            <Clock className="h-10 w-10 text-white" />
+      {/* ANIMACIÓN DE ENTRADA SUAVE: fade-in y slide-up */}
+      <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
+        <Card className="border-2 border-foreground/5 shadow-2xl bg-card text-card-foreground overflow-hidden">
+          <div className="h-1.5 flex">
+            <div className="w-1/3 bg-primary" />
+            <div className="w-1/3 bg-accent" />
+            <div className="w-1/3 bg-secondary" />
           </div>
-          <CardTitle className="font-black text-2xl uppercase italic tracking-tighter text-foreground">
-            Acceso Trabajador
-          </CardTitle>
-          <CardDescription className="uppercase font-bold text-[10px] tracking-widest text-muted-foreground mt-2">
-            Introduce tu clave de 4 dígitos
-          </CardDescription>
-        </CardHeader>
 
-        <CardContent className="space-y-8 pb-10">
-          {errorMessage && (
-            <Alert variant="destructive" className="animate-in shake-1 duration-300">
-              <AlertDescription className="font-bold text-center text-xs uppercase">{errorMessage}</AlertDescription>
-            </Alert>
-          )}
+          <CardHeader className="text-center pt-10">
+            <div className="mx-auto mb-6 h-20 w-20 bg-primary flex items-center justify-center rounded-lg shadow-lg">
+              <Clock className="h-10 w-10 text-white" />
+            </div>
+            <CardTitle className="font-black text-2xl uppercase italic tracking-tighter text-foreground">
+              Acceso Trabajador
+            </CardTitle>
+            <CardDescription className="uppercase font-bold text-[10px] tracking-widest text-muted-foreground mt-2">
+              Introduce tu clave de 4 dígitos
+            </CardDescription>
+          </CardHeader>
 
-          <div className="flex flex-col items-center gap-6">
-            <InputOTP
-              maxLength={4}
-              value={accessCode}
-              onChange={(v) => { setAccessCode(v); setErrorMessage(null); }}
-              disabled={isSubmitting}
-            >
-              <InputOTPGroup className="gap-4">
-                {[0, 1, 2, 3].map((i) => (
-                  <InputOTPSlot 
-                    key={i} 
-                    index={i} 
-                    className="h-16 w-14 text-2xl font-black border-2 border-muted bg-muted/20 focus:border-primary focus:bg-background text-foreground transition-all rounded-md" 
-                  />
-                ))}
-              </InputOTPGroup>
-            </InputOTP>
-
-            {isSubmitting && (
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Validando...</span>
-              </div>
+          <CardContent className="space-y-8 pb-10">
+            {errorMessage && (
+              <Alert variant="destructive" className="animate-in shake-1 duration-500">
+                <AlertDescription className="font-bold text-center text-xs uppercase">{errorMessage}</AlertDescription>
+              </Alert>
             )}
-          </div>
 
-          <div className="flex items-center gap-4 py-2">
-            <div className="flex-1 h-px bg-border" />
-            <div className="h-1.5 w-1.5 bg-primary rotate-45" />
-            <div className="flex-1 h-px bg-border" />
-          </div>
+            <div className="flex flex-col items-center gap-6">
+              <InputOTP
+                maxLength={4}
+                value={accessCode}
+                onChange={(v) => { setAccessCode(v); setErrorMessage(null); }}
+                disabled={isSubmitting}
+              >
+                <InputOTPGroup className="gap-4">
+                  {[0, 1, 2, 3].map((i) => (
+                    <InputOTPSlot 
+                      key={i} 
+                      index={i} 
+                      className="h-16 w-14 text-2xl font-black border-2 border-muted bg-muted/20 focus:border-primary focus:bg-background text-foreground transition-all rounded-md" 
+                    />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
 
-          <div className="text-center space-y-4">
-            <Link 
-              to="/auth/admin" 
-              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              Acceso Administrador
-            </Link>
-            <p className="text-[9px] text-muted-foreground/60 uppercase font-medium tracking-tight">
-              Protección de datos conforme al RGPD
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+              {isSubmitting && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Validando...</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 py-2">
+              <div className="flex-1 h-px bg-border" />
+              <div className="h-1.5 w-1.5 bg-primary rotate-45" />
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            <div className="text-center space-y-4">
+              <Link 
+                to="/auth/admin" 
+                className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Acceso Administrador
+              </Link>
+              <p className="text-[9px] text-muted-foreground/60 uppercase font-medium tracking-tight">
+                Protección de datos conforme al RGPD
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
