@@ -84,7 +84,7 @@ export const WorkersView = () => {
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
       if (editingProfile) {
-        // 1. ACTUALIZACIÓN
+        // ACTUALIZACIÓN DE USUARIO
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -107,7 +107,7 @@ export const WorkersView = () => {
         if (credError) throw credError;
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // 2. NUEVO ALTA CON UPSERT (Evita el error de guardado duplicado)
+        // NUEVO ALTA INTEGRAL CON PROTECCIÓN CONTRA DUPLICADOS
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
@@ -116,14 +116,14 @@ export const WorkersView = () => {
 
         if (authError) {
           if (authError.message.includes("already registered")) {
-            throw new Error("El sistema detecta que este usuario aún existe en Authentication. Bórralo allí primero.");
+            throw new Error("Este DNI/Email ya existe en el sistema de autenticación. Bórralo en Supabase > Authentication > Users.");
           }
           throw authError;
         }
 
-        if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
+        if (!authData.user) throw new Error("No se recibió respuesta del servidor de autenticación.");
 
-        // Paso B: Profile con UPSERT (Sincroniza incluso si hay restos antiguos)
+        // Usamos UPSERT para evitar el error de base de datos si ya existía la fila
         const { error: profileInsertError } = await supabase.from('profiles').upsert({
           id: authData.user.id,
           full_name: formData.fullName,
@@ -137,7 +137,6 @@ export const WorkersView = () => {
 
         if (profileInsertError) throw profileInsertError;
 
-        // Paso C: Credentials con UPSERT
         const { error: credInsertError } = await supabase.from('worker_credentials').upsert({
           user_id: authData.user.id,
           access_code: formData.password
@@ -145,17 +144,16 @@ export const WorkersView = () => {
 
         if (credInsertError) throw credInsertError;
 
-        toast({ title: '¡Éxito!', description: 'Trabajador registrado correctamente.' });
+        toast({ title: '¡Éxito!', description: 'Usuario registrado correctamente.' });
       }
 
       await loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
-      console.error("Error detallado:", err);
       toast({ 
         variant: 'destructive', 
         title: 'Error de Guardado', 
-        description: err.message || 'Fallo en la comunicación con la base de datos.' 
+        description: err.message || 'Error en la base de datos.' 
       });
     } finally {
       setIsSaving(false);
@@ -190,7 +188,7 @@ export const WorkersView = () => {
           </TableHeader>
           <TableBody>
             {profiles.map((p, index) => (
-              <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${index * 40}ms` }}>
+              <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30">
                 <TableCell className="font-bold py-5">
                   <div className="flex flex-col">
                     <span>{p.full_name}</span>
@@ -198,7 +196,7 @@ export const WorkersView = () => {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit group-hover:border-primary/50 transition-colors">
+                  <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
                     <span className="font-mono font-bold text-primary text-sm">
                       {visibleCodes[p.id] ? (workerCredentials.find(c => c.user_id === p.id)?.access_code || '----') : '••••'}
                     </span>
@@ -218,7 +216,7 @@ export const WorkersView = () => {
                     <div className="[&_button]:text-black [&_button]:dark:text-white font-bold transition-opacity hover:opacity-70">
                       <MonthlyReportDialog profile={p} />
                     </div>
-                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full transition-all">
+                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full">
                       <Pencil className="h-4 w-4" />
                     </button>
                   </div>
