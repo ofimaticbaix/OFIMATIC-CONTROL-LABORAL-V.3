@@ -13,7 +13,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MonthlyReportDialog } from '../admin/MonthlyReportDialog';
 
-// Exportación corregida para evitar errores en Vercel
 export const WorkersView = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [workerCredentials, setWorkerCredentials] = useState<any[]>([]);
@@ -44,6 +43,8 @@ export const WorkersView = () => {
       const { data: c } = await supabase.from('worker_credentials').select('*');
       setProfiles(p || []);
       setWorkerCredentials(c || []);
+    } catch (err) {
+      console.error("Error al cargar datos:", err);
     } finally {
       setLoading(false);
     }
@@ -78,7 +79,6 @@ export const WorkersView = () => {
     setIsSaving(true);
     
     try {
-      // Datos técnicos basados en el DNI
       const userEmail = `${formData.dni.toLowerCase()}@ofimatic.com`;
       const technicalPassword = `worker_${formData.password}_${formData.dni}`;
 
@@ -106,15 +106,20 @@ export const WorkersView = () => {
 
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // NUEVO ALTA INTEGRAL
+        // NUEVO ALTA
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
-          options: { data: { full_name: formData.fullName, role: 'worker' } }
+          options: { 
+            data: { 
+              full_name: formData.fullName, 
+              role: 'worker' 
+            } 
+          }
         });
 
         if (authError) throw authError;
-        if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
+        if (!authData.user) throw new Error("No se pudo crear el usuario de autenticación.");
 
         const { error: profileInsertError } = await supabase.from('profiles').insert({
           id: authData.user.id,
@@ -136,12 +141,13 @@ export const WorkersView = () => {
 
         if (credInsertError) throw credInsertError;
 
-        toast({ title: '¡Éxito!', description: 'Trabajador registrado en todas las tablas.' });
+        toast({ title: 'Éxito', description: 'Trabajador registrado correctamente.' });
       }
 
       await loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
+      console.error("Error al guardar:", err);
       toast({ 
         variant: 'destructive', 
         title: 'Error de Guardado', 
@@ -180,14 +186,15 @@ export const WorkersView = () => {
           </TableHeader>
           <TableBody>
             {profiles.map((p, index) => {
+              if (p.role === 'admin') return null;
               const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
               return (
                 <TableRow key={p.id} className="transition-colors border-b last:border-0 hover:bg-muted/30 animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${index * 40}ms` }}>
                   <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit group-hover:border-primary/50 transition-colors">
+                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
                       <span className="font-mono font-bold text-primary text-sm">{visibleCodes[p.id] ? pin : '••••'}</span>
-                      <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground transition-colors">
+                      <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground">
                         {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
                     </div>
@@ -246,7 +253,7 @@ export const WorkersView = () => {
             </div>
             <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
               <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
-              <Input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto text-foreground" maxLength={4} />
+              <Input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto text-foreground focus-visible:ring-0" maxLength={4} />
             </div>
             <div className="space-y-4 border-t pt-5">
               <Label className="text-[10px] font-black uppercase text-muted-foreground">Configuración de la Jornada</Label>
