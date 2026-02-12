@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  Plus, Pencil, UserX, Search, Eye, EyeOff, Save, 
-  Loader2, Lock, Clock, CalendarDays 
+  Plus, Pencil, Search, Eye, EyeOff, 
+  Loader2, Clock, CalendarDays 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -147,20 +147,21 @@ export const WorkersView = () => {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-[10px] font-bold uppercase space-y-0.5">
-                      <p className="text-foreground/80">{p.position || '---'}</p>
-                      <p className="text-muted-foreground">{p.work_day_type === 'Estándar' ? `⏱️ ${p.daily_hours}h diarias` : '📅 Personalizada'}</p>
+                    <div className="text-[10px] font-bold uppercase space-y-0.5 text-foreground">
+                      <p className="opacity-80">{p.position || '---'}</p>
+                      <p className="text-muted-foreground font-medium">{p.work_day_type === 'Estándar' ? `⏱️ ${p.daily_hours}h diarias` : '📅 Personalizada'}</p>
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-3 items-center">
-                      {/* Botones siempre visibles y adaptativos  */}
-                      <div className="text-muted-foreground hover:text-foreground transition-colors">
+                      {/* Botón de Informe con color fijo para máxima visibilidad en Light Mode */}
+                      <div className="text-primary hover:opacity-80 transition-opacity">
                         <MonthlyReportDialog profile={p} />
                       </div>
+                      {/* Botón de Editar adaptativo pero siempre visible */}
                       <button 
                         onClick={() => handleOpenDialog(p)} 
-                        className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-muted"
+                        className="text-muted-foreground hover:text-foreground p-2 rounded-full hover:bg-muted transition-all"
                         title="Editar trabajador"
                       >
                         <Pencil className="h-4 w-4" />
@@ -174,6 +175,7 @@ export const WorkersView = () => {
         </Table>
       </div>
 
+      {/* El resto del componente permanece igual para mantener la coherencia del formulario */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
