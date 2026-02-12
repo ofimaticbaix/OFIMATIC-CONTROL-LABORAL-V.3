@@ -84,7 +84,6 @@ export const WorkersView = () => {
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
       if (editingProfile) {
-        // ACTUALIZACIÓN DE USUARIO
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -107,7 +106,6 @@ export const WorkersView = () => {
         if (credError) throw credError;
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // NUEVO ALTA INTEGRAL CON PROTECCIÓN CONTRA DUPLICADOS
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
@@ -116,14 +114,13 @@ export const WorkersView = () => {
 
         if (authError) {
           if (authError.message.includes("already registered")) {
-            throw new Error("Este DNI/Email ya existe en el sistema de autenticación. Bórralo en Supabase > Authentication > Users.");
+            throw new Error("Este usuario ya existe en Authentication. Bórralo allí primero.");
           }
           throw authError;
         }
 
-        if (!authData.user) throw new Error("No se recibió respuesta del servidor de autenticación.");
+        if (!authData.user) throw new Error("No se recibió respuesta del servidor.");
 
-        // Usamos UPSERT para evitar el error de base de datos si ya existía la fila
         const { error: profileInsertError } = await supabase.from('profiles').upsert({
           id: authData.user.id,
           full_name: formData.fullName,
@@ -153,7 +150,7 @@ export const WorkersView = () => {
       toast({ 
         variant: 'destructive', 
         title: 'Error de Guardado', 
-        description: err.message || 'Error en la base de datos.' 
+        description: err.message || 'Fallo en la comunicación con la base de datos.' 
       });
     } finally {
       setIsSaving(false);
@@ -179,7 +176,7 @@ export const WorkersView = () => {
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
-            <TableRow className="hover:bg-transparent">
+            <TableRow className="hover:bg-transparent border-b">
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Nombre</TableHead>
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">PIN de Acceso</TableHead>
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Puesto / Jornada</TableHead>
@@ -216,7 +213,7 @@ export const WorkersView = () => {
                     <div className="[&_button]:text-black [&_button]:dark:text-white font-bold transition-opacity hover:opacity-70">
                       <MonthlyReportDialog profile={p} />
                     </div>
-                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full">
+                    <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full transition-all">
                       <Pencil className="h-4 w-4" />
                     </button>
                   </div>
@@ -264,16 +261,38 @@ export const WorkersView = () => {
               <Label className="text-[10px] font-black uppercase opacity-70">Configuración de la Jornada</Label>
               <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
                 <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-background border"><SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem><SelectItem value="Personalizada">Jornada Personalizada</SelectItem></SelectContent>
+                <SelectContent className="bg-background border">
+                  <SelectItem value="Estándar">Jornada Estándar (L-V)</SelectItem>
+                  <SelectItem value="Personalizada">Jornada Personalizada</SelectItem>
+                </SelectContent>
               </Select>
-              <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
-                <Clock className="text-primary h-5 w-5" />
-                <div className="flex-1">
-                  <Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label>
-                  <Input type="number" step="0.5" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto focus-visible:ring-0" />
+
+              {/* LÓGICA DE JORNADA PERSONALIZADA REINSTAURADA */}
+              {formData.workDayType === 'Estándar' ? (
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border animate-in fade-in zoom-in-95 duration-300">
+                  <Clock className="text-primary h-5 w-5" />
+                  <div className="flex-1">
+                    <Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label>
+                    <Input type="number" step="0.5" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto focus-visible:ring-0" />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3 bg-muted/10 p-5 rounded-lg border animate-in slide-in-from-top-2 duration-500">
+                  <p className="text-[9px] font-black uppercase tracking-tighter text-primary mb-2">Horario semanal detallado</p>
+                  {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
+                    <div key={day} className="flex items-center justify-between gap-4 border-b border-foreground/5 pb-2 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold uppercase opacity-60 w-20">{day}</span>
+                      <div className="flex items-center gap-2">
+                        <Input type="time" className="bg-background border-input h-8 text-[11px] font-bold w-24 px-2" defaultValue="09:00" />
+                        <span className="text-[10px] font-black opacity-30">→</span>
+                        <Input type="time" className="bg-background border-input h-8 text-[11px] font-bold w-24 px-2" defaultValue="18:00" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
             <DialogFooter className="pt-2">
               <Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg">
                 {isSaving ? <Loader2 className="animate-spin h-5 w-5 text-white" /> : 'Confirmar Alta / Cambios'}
