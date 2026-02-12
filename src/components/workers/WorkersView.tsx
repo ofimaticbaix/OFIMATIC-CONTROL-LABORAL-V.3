@@ -107,8 +107,10 @@ export const WorkersView = () => {
       let userId = editingProfile?.id;
 
       if (!editingProfile) {
-        // 🆕 NUEVA ALTA - SIN TRIGGER, TODO MANUAL
+        // 🆕 NUEVA ALTA
         console.log('🔄 Iniciando creación de usuario...');
+        console.log('📧 Email:', userEmail);
+        console.log('👤 Nombre:', formData.fullName);
         
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
@@ -122,20 +124,35 @@ export const WorkersView = () => {
         });
 
         if (authError) {
+          console.error('❌ Error en Auth:', authError);
           if (authError.message?.includes('User already registered')) {
-            throw new Error('Este email ya está registrado. Ve a Authentication en Supabase y elimínalo antes de continuar.');
+            throw new Error('Este email ya existe. Ejecuta este SQL en Supabase para limpiarlo: DELETE FROM auth.users WHERE email = \'' + userEmail + '\';');
           }
           throw authError;
         }
 
         userId = authData.user?.id;
-        if (!userId) throw new Error("No se pudo crear el usuario en Authentication");
+        if (!userId) {
+          throw new Error("No se pudo obtener el ID del usuario");
+        }
 
         console.log('✅ Usuario creado en Auth:', userId);
 
-        // 📝 CREAR PERFIL MANUALMENTE (sin trigger)
-        console.log('📝 Creando perfil...');
-        const { error: profileError } = await supabase
+        // 📝 CREAR PERFIL
+        console.log('📝 Creando perfil en profiles...');
+        console.log('Datos del perfil:', {
+          id: userId,
+          full_name: formData.fullName,
+          dni: cleanDni,
+          position: formData.position,
+          role: formData.role,
+          email: userEmail,
+          work_day_type: formData.workDayType,
+          daily_hours: parseFloat(formData.dailyHours),
+          is_active: true
+        });
+
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .insert({
             id: userId,
@@ -147,30 +164,45 @@ export const WorkersView = () => {
             work_day_type: formData.workDayType,
             daily_hours: parseFloat(formData.dailyHours),
             is_active: true
-          });
+          })
+          .select()
+          .single();
 
         if (profileError) {
           console.error('❌ Error creando perfil:', profileError);
+          console.error('Detalles del error:', JSON.stringify(profileError, null, 2));
           throw new Error(`Error al crear perfil: ${profileError.message}`);
         }
 
-        console.log('✅ Perfil creado correctamente');
+        console.log('✅ Perfil creado:', profileData);
 
-        // 🔑 Crear credenciales
+        // ⏳ Pequeña pausa para asegurar que el perfil se haya guardado
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // 🔑 CREAR CREDENCIALES
         console.log('🔑 Creando credenciales...');
-        const { error: credsError } = await supabase
+        console.log('Datos credenciales:', {
+          user_id: userId,
+          access_code: formData.password
+        });
+
+        const { data: credData, error: credsError } = await supabase
           .from('worker_credentials')
           .insert({
             user_id: userId,
             access_code: formData.password
-          });
+          })
+          .select()
+          .single();
 
         if (credsError) {
           console.error('❌ Error creando credenciales:', credsError);
+          console.error('Detalles del error:', JSON.stringify(credsError, null, 2));
           throw new Error(`Error al crear credenciales: ${credsError.message}`);
         }
 
-        console.log('✅ Credenciales creadas correctamente');
+        console.log('✅ Credenciales creadas:', credData);
+        console.log('🎉 TRABAJADOR CREADO EXITOSAMENTE');
 
       } else {
         // ✏️ EDICIÓN
@@ -219,14 +251,15 @@ export const WorkersView = () => {
       setIsDialogOpen(false);
       
     } catch (err: any) {
-      console.error('❌ Error completo al guardar:', err);
+      console.error('❌ ERROR COMPLETO:', err);
+      console.error('Stack trace:', err.stack);
       
       let errorMsg = err.message || 'Error desconocido';
       
       if (err.message?.includes('duplicate key')) {
-        errorMsg = 'Este DNI ya está registrado. Usa el botón "Editar".';
+        errorMsg = 'Ya existe un registro con estos datos. Verifica DNI y credenciales.';
       } else if (err.message?.includes('already registered')) {
-        errorMsg = 'El email ya existe en Authentication.';
+        errorMsg = err.message; // Incluye el SQL para limpiar
       }
       
       toast({ 
@@ -363,7 +396,6 @@ export const WorkersView = () => {
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="space-y-6 pt-4 text-foreground">
-            {/* Datos Personales */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">
@@ -392,7 +424,6 @@ export const WorkersView = () => {
               </div>
             </div>
 
-            {/* Puesto y Rol */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">
@@ -424,7 +455,6 @@ export const WorkersView = () => {
               </div>
             </div>
 
-            {/* PIN de Acceso */}
             <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
               <Label className="text-[10px] font-black uppercase text-primary">
                 PIN de Acceso (4 dígitos) *
@@ -444,7 +474,6 @@ export const WorkersView = () => {
               </p>
             </div>
 
-            {/* Configuración de Jornada */}
             <div className="space-y-4 border-t pt-5">
               <Label className="text-[10px] font-black uppercase opacity-70">
                 Configuración de la Jornada
