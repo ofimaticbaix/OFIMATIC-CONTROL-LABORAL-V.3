@@ -29,14 +29,7 @@ export const WorkersView = () => {
     role: 'worker',
     workDayType: 'Estándar',
     dailyHours: '8',
-    password: '',
-    schedule: {
-      monday: { from: '09:00', to: '18:00', active: true },
-      tuesday: { from: '09:00', to: '18:00', active: true },
-      wednesday: { from: '09:00', to: '18:00', active: true },
-      thursday: { from: '09:00', to: '18:00', active: true },
-      friday: { from: '09:00', to: '14:00', active: true },
-    }
+    password: '', // Este es el PIN de 4 dígitos
   });
 
   const { toast } = useToast();
@@ -60,7 +53,6 @@ export const WorkersView = () => {
       const creds = workerCredentials.find(c => c.user_id === profile.id);
       setEditingProfile(profile);
       setFormData({
-        ...formData,
         fullName: profile.full_name || '',
         dni: profile.dni || '',
         position: profile.position || '',
@@ -74,8 +66,7 @@ export const WorkersView = () => {
       const autoPin = String(Math.floor(1000 + Math.random() * 9000));
       setFormData({
         fullName: '', dni: '', position: '', role: 'worker', 
-        workDayType: 'Estándar', dailyHours: '8', password: autoPin,
-        schedule: formData.schedule
+        workDayType: 'Estándar', dailyHours: '8', password: autoPin
       });
     }
     setIsDialogOpen(true);
@@ -84,29 +75,90 @@ export const WorkersView = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    
     try {
-      const payload = {
-        full_name: formData.fullName,
-        dni: formData.dni,
-        position: formData.position,
-        role: formData.role,
-        work_day_type: formData.workDayType,
-        daily_hours: parseFloat(formData.dailyHours)
-      };
-
       if (editingProfile) {
-        await supabase.from('profiles').update(payload).eq('id', editingProfile.id);
-        await supabase.from('worker_credentials').update({ access_code: formData.password }).eq('user_id', editingProfile.id);
+        // 1. ACTUALIZAR PERFIL EXISTENTE
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            full_name: formData.fullName,
+            dni: formData.dni,
+            position: formData.position,
+            role: formData.role,
+            work_day_type: formData.workDayType,
+            daily_hours: parseFloat(formData.dailyHours)
+          })
+          .eq('id', editingProfile.id);
+
+        if (profileError) throw profileError;
+
+        const { error: credError } = await supabase
+          .from('worker_credentials')
+          .update({ access_code: formData.password })
+          .eq('user_id', editingProfile.id);
+
+        if (credError) throw credError;
+
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // Lógica simplificada para nuevo alta (Se requiere manejar Auth por separado según tu arquitectura)
-        toast({ title: 'Aviso', description: 'Alta de nuevo usuario en proceso.' });
+        // 2. NUEVO ALTA (AUTENTICACIÓN + PERFIL + CREDENCIAL)
+        // Generamos un email técnico basado en DNI para evitar pedirlo
+        const userEmail = `${formData.dni.toLowerCase()}@ofimatic.com`;
+        // La contraseña técnica que requiere el login de trabajador
+        const technicalPassword = `worker_${formData.password}_${formData.dni}`;
+
+        // A. Crear usuario en Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: userEmail,
+          password: technicalPassword,
+          options: {
+            data: {
+              full_name: formData.fullName,
+              role: 'worker'
+            }
+          }
+        });
+
+        if (authError) throw authError;
+        if (!authData.user) throw new Error("No se pudo crear el usuario de autenticación.");
+
+        // B. Crear perfil en la tabla 'profiles'
+        const { error: profileInsertError } = await supabase.from('profiles').insert({
+          id: authData.user.id,
+          full_name: formData.fullName,
+          dni: formData.dni,
+          position: formData.position,
+          role: 'worker',
+          email: userEmail,
+          work_day_type: formData.workDayType,
+          daily_hours: parseFloat(formData.dailyHours)
+        });
+
+        if (profileInsertError) throw profileInsertError;
+
+        // C. Crear PIN en 'worker_credentials'
+        const { error: credInsertError } = await supabase.from('worker_credentials').insert({
+          user_id: authData.user.id,
+          access_code: formData.password
+        });
+
+        if (credInsertError) throw credInsertError;
+
+        toast({ title: '¡Éxito!', description: 'Trabajador creado y registrado en el sistema.' });
       }
+
       loadData();
       setIsDialogOpen(false);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
-    } finally { setIsSaving(false); }
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error', 
+        description: err.message || 'Verifica que el DNI no esté duplicado.' 
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (loading) return (
@@ -119,7 +171,7 @@ export const WorkersView = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter">Gestión de Trabajadores</h2>
+        <h2 className="text-xl font-black uppercase italic text-foreground tracking-tighter text-black dark:text-white">Gestión de Trabajadores</h2>
         <Button onClick={() => handleOpenDialog()} className="bg-primary text-primary-foreground font-bold uppercase text-[10px] px-6 transition-transform hover:scale-105 active:scale-95">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
@@ -146,7 +198,7 @@ export const WorkersView = () => {
                 >
                   <TableCell className="font-bold text-foreground py-5">{p.full_name}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit group-hover:border-primary/50 transition-colors">
+                    <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-md border w-fit">
                       <span className="font-mono font-bold text-primary text-sm">{visibleCodes[p.id] ? pin : '••••'}</span>
                       <button onClick={() => setVisibleCodes(prev => ({...prev, [p.id]: !prev[p.id]}))} className="text-muted-foreground hover:text-foreground transition-colors">
                         {visibleCodes[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -191,18 +243,18 @@ export const WorkersView = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nombre Completo</Label>
-                <Input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-muted/30 border-input text-foreground" />
+                <Input required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="bg-muted/30 border-input text-foreground" placeholder="Ej: Alex Test" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">DNI / NIE</Label>
-                <Input value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30 border-input text-foreground" />
+                <Input required value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30 border-input text-foreground" placeholder="Ej: 1245678" />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Puesto</Label>
-                <Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-muted/30 border-input text-foreground" />
+                <Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="bg-muted/30 border-input text-foreground" placeholder="Ej: Developer" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Tipo de Cuenta</Label>
@@ -217,8 +269,8 @@ export const WorkersView = () => {
             </div>
 
             <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
-              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
-              <Input value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto text-foreground" maxLength={4} />
+              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (4 dígitos)</Label>
+              <Input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto text-foreground focus-visible:ring-0" maxLength={4} />
             </div>
 
             <div className="space-y-4 border-t pt-5">
@@ -231,33 +283,22 @@ export const WorkersView = () => {
                 </SelectContent>
               </Select>
 
-              {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
-                  <Clock className="text-primary h-5 w-5" />
-                  <div className="flex-1">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Horas diarias (L-V)</Label>
-                    <Input type="number" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto text-foreground" />
-                  </div>
+              <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
+                <Clock className="text-primary h-5 w-5" />
+                <div className="flex-1">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Horas diarias estimadas</Label>
+                  <Input type="number" step="0.5" value={formData.dailyHours} onChange={e => setFormData({...formData, dailyHours: e.target.value})} className="bg-transparent border-none text-2xl font-black p-0 h-auto text-foreground focus-visible:ring-0" />
                 </div>
-              ) : (
-                <div className="space-y-2.5 bg-muted/10 p-5 rounded-lg border">
-                  {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((day) => (
-                    <div key={day} className="flex items-center justify-between gap-4 border-b last:border-0 pb-2.5 last:pb-0">
-                      <span className="text-[10px] font-black uppercase text-muted-foreground w-16">{day}</span>
-                      <div className="flex items-center gap-2">
-                        <Input type="time" className="bg-background border-input h-8 text-xs font-bold w-28" defaultValue="09:00" />
-                        <span className="text-muted-foreground text-[10px] font-bold">a</span>
-                        <Input type="time" className="bg-background border-input h-8 text-xs font-bold w-28" defaultValue="18:00" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              </div>
             </div>
 
             <DialogFooter className="pt-2">
-              <Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg transition-transform hover:scale-[1.01] active:scale-95">
-                {isSaving ? 'Guardando...' : 'Confirmar Cambios'}
+              <Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg">
+                {isSaving ? (
+                  <span className="flex items-center gap-2"><Loader2 className="animate-spin h-4 w-4" /> Guardando...</span>
+                ) : (
+                  'Confirmar Alta / Cambios'
+                )}
               </Button>
             </DialogFooter>
           </form>
