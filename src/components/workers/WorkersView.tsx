@@ -108,9 +108,9 @@ export const WorkersView = () => {
   };
 
   if (loading) return (
-    <div className="p-20 text-center flex flex-col items-center gap-4">
+    <div className="p-20 text-center flex flex-col items-center gap-4 text-foreground">
       <Loader2 className="animate-spin h-10 w-10 text-primary" />
-      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cargando trabajadores...</p>
+      <p className="text-xs font-black uppercase tracking-widest opacity-70">Cargando trabajadores...</p>
     </div>
   );
 
@@ -159,8 +159,8 @@ export const WorkersView = () => {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-3 items-center">
-                      {/* BOTÓN INFORME: Sin fondo verde. Letras negras en Light y blancas en Dark */}
-                      <div className="text-black dark:text-white font-bold transition-opacity hover:opacity-70">
+                      {/* BOTÓN INFORME: Aplicamos clase forzada para que las letras sean negras en Light y blancas en Dark */}
+                      <div className="[&_button]:text-black [&_button]:dark:text-white font-bold transition-opacity hover:opacity-70">
                         <MonthlyReportDialog profile={p} />
                       </div>
                       <button 
@@ -179,7 +179,20 @@ export const WorkersView = () => {
         </Table>
       </div>
 
-      {/* Resto del componente (Dialog)... */}
+      {/* Formulario (se mantiene igual con clases adaptativas) */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+            {/* ... campos de formulario ... */}
+            <DialogFooter className="pt-2">
+              <Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg">
+                {isSaving ? 'Guardando...' : 'Confirmar Cambios'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
