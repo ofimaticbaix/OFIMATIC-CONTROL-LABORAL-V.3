@@ -3,7 +3,6 @@ import {
   Plus, Pencil, Search, Eye, EyeOff, 
   Loader2, Clock, CalendarDays 
 } from 'lucide-react';
-// IMPORTACIÓN FALTANTE QUE CAUSABA EL ERROR
 import { Button } from '@/components/ui/button'; 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -160,8 +159,8 @@ export const WorkersView = () => {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-3 items-center">
-                      {/* Botón Informe con fondo azul y letras blancas */}
-                      <div className="bg-blue-600 text-white rounded-md flex items-center shadow-sm hover:bg-blue-700 transition-colors">
+                      {/* BOTÓN INFORME: Fondo Verde y Letras Blancas para Light Mode */}
+                      <div className="bg-[#10b981] hover:bg-[#059669] text-white rounded-md flex items-center shadow-sm transition-colors px-2 py-1">
                         <MonthlyReportDialog profile={p} />
                       </div>
                       <button 
