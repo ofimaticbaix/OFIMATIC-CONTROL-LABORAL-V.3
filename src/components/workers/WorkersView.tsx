@@ -46,11 +46,14 @@ export const WorkersView = () => {
 
   const loadData = async () => {
     setLoading(true);
-    const { data: p } = await supabase.from('profiles').select('*').order('full_name');
-    const { data: c } = await supabase.from('worker_credentials').select('*');
-    setProfiles(p || []);
-    setWorkerCredentials(c || []);
-    setLoading(false);
+    try {
+      const { data: p } = await supabase.from('profiles').select('*').order('full_name');
+      const { data: c } = await supabase.from('worker_credentials').select('*');
+      setProfiles(p || []);
+      setWorkerCredentials(c || []);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenDialog = (profile?: any) => {
@@ -95,9 +98,9 @@ export const WorkersView = () => {
       if (editingProfile) {
         await supabase.from('profiles').update(payload).eq('id', editingProfile.id);
         await supabase.from('worker_credentials').update({ access_code: formData.password }).eq('user_id', editingProfile.id);
-        toast({ title: 'Éxito', description: 'Datos y PIN actualizados.' });
+        toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // Lógica SignUp...
+        // Lógica de Registro (SignUp) aquí...
       }
       loadData();
       setIsDialogOpen(false);
@@ -106,12 +109,12 @@ export const WorkersView = () => {
     } finally { setIsSaving(false); }
   };
 
-  if (loading) return <div className="p-20 text-center text-white"><Loader2 className="animate-spin h-8 w-8 mx-auto" /></div>;
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-blue-500" /></div>;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-black text-white uppercase italic">Trabajadores</h2>
+        <h2 className="text-xl font-black text-white uppercase italic">Gestión de Trabajadores</h2>
         <Button onClick={() => handleOpenDialog()} className="bg-blue-600 font-bold uppercase text-[10px] px-6">
           <Plus className="h-4 w-4 mr-2" /> Nuevo Alta
         </Button>
@@ -127,7 +130,7 @@ export const WorkersView = () => {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {profiles.filter(p => p.full_name.toLowerCase().includes(searchTerm.toLowerCase())).map(p => {
+          {profiles.map(p => {
             const pin = workerCredentials.find(c => c.user_id === p.id)?.access_code || '----';
             return (
               <TableRow key={p.id} className="border-slate-800 hover:bg-slate-800/20 group">
