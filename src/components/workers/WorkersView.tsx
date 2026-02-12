@@ -79,16 +79,18 @@ export const WorkersView = () => {
     setIsSaving(true);
     
     try {
-      const userEmail = `${formData.dni.toLowerCase()}@ofimatic.com`;
-      const technicalPassword = `worker_${formData.password}_${formData.dni}`;
+      // Limpiamos espacios y formateamos datos técnicos
+      const cleanDni = formData.dni.trim().toUpperCase();
+      const userEmail = `${cleanDni.toLowerCase()}@ofimatic.com`;
+      const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
       if (editingProfile) {
-        // ACTUALIZACIÓN
+        // LÓGICA DE ACTUALIZACIÓN
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
             full_name: formData.fullName,
-            dni: formData.dni,
+            dni: cleanDni,
             position: formData.position,
             work_day_type: formData.workDayType,
             daily_hours: parseFloat(formData.dailyHours)
@@ -106,7 +108,7 @@ export const WorkersView = () => {
 
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // NUEVO ALTA
+        // LÓGICA DE NUEVO ALTA INTEGRAL
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
@@ -119,12 +121,13 @@ export const WorkersView = () => {
         });
 
         if (authError) throw authError;
-        if (!authData.user) throw new Error("No se pudo crear el usuario de autenticación.");
+        if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
 
+        // Insertamos perfil y credenciales manualmente para asegurar sincronización
         const { error: profileInsertError } = await supabase.from('profiles').insert({
           id: authData.user.id,
           full_name: formData.fullName,
-          dni: formData.dni,
+          dni: cleanDni,
           position: formData.position,
           role: 'worker',
           email: userEmail,
@@ -141,7 +144,7 @@ export const WorkersView = () => {
 
         if (credInsertError) throw credInsertError;
 
-        toast({ title: 'Éxito', description: 'Trabajador registrado correctamente.' });
+        toast({ title: '¡Éxito!', description: 'Trabajador registrado en todas las tablas.' });
       }
 
       await loadData();
@@ -177,7 +180,7 @@ export const WorkersView = () => {
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
-            <TableRow className="hover:bg-transparent">
+            <TableRow className="hover:bg-transparent border-b">
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Nombre</TableHead>
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">PIN de Acceso</TableHead>
               <TableHead className="text-muted-foreground font-bold uppercase text-[10px] h-12">Puesto / Jornada</TableHead>
@@ -271,7 +274,7 @@ export const WorkersView = () => {
             </div>
             <DialogFooter className="pt-2">
               <Button type="submit" disabled={isSaving} className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest h-12 shadow-lg">
-                {isSaving ? <Loader2 className="animate-spin h-5 w-5" /> : 'Confirmar Alta / Cambios'}
+                {isSaving ? <Loader2 className="animate-spin h-5 w-5 text-white" /> : 'Confirmar Alta / Cambios'}
               </Button>
             </DialogFooter>
           </form>
