@@ -107,7 +107,7 @@ export const WorkersView = () => {
       let userId = editingProfile?.id;
 
       if (!editingProfile) {
-        // 🆕 NUEVA ALTA - El trigger creará el perfil automáticamente
+        // 🆕 NUEVA ALTA - SIN TRIGGER, TODO MANUAL
         console.log('🔄 Iniciando creación de usuario...');
         
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -116,67 +116,47 @@ export const WorkersView = () => {
           options: {
             data: {
               full_name: formData.fullName,
-              role: formData.role,
-              dni: cleanDni,
-              position: formData.position,
-              work_day_type: formData.workDayType,
-              daily_hours: formData.dailyHours
+              role: formData.role
             }
           }
         });
 
         if (authError) {
           if (authError.message?.includes('User already registered')) {
-            throw new Error('Este DNI ya está registrado. Ve a Authentication en Supabase y elimina el usuario duplicado, o edita el trabajador existente.');
+            throw new Error('Este email ya está registrado. Ve a Authentication en Supabase y elimínalo antes de continuar.');
           }
           throw authError;
         }
 
         userId = authData.user?.id;
-        if (!userId) throw new Error("No se pudo obtener el ID del usuario creado");
+        if (!userId) throw new Error("No se pudo crear el usuario en Authentication");
 
         console.log('✅ Usuario creado en Auth:', userId);
 
-        // ⏳ Esperar a que el trigger procese (importante)
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Verificar que el perfil se creó
-        console.log('🔍 Verificando creación del perfil...');
-        const { data: checkProfile, error: checkError } = await supabase
+        // 📝 CREAR PERFIL MANUALMENTE (sin trigger)
+        console.log('📝 Creando perfil...');
+        const { error: profileError } = await supabase
           .from('profiles')
-          .select('id, full_name')
-          .eq('id', userId)
-          .single();
+          .insert({
+            id: userId,
+            full_name: formData.fullName,
+            dni: cleanDni,
+            position: formData.position,
+            role: formData.role,
+            email: userEmail,
+            work_day_type: formData.workDayType,
+            daily_hours: parseFloat(formData.dailyHours),
+            is_active: true
+          });
 
-        if (checkError || !checkProfile) {
-          console.error('❌ El perfil NO se creó automáticamente');
-          console.error('Error del check:', checkError);
-          
-          // Fallback: Si el trigger falló, lo creamos manualmente
-          console.log('🔧 Intentando crear perfil manualmente...');
-          const { error: manualProfileError } = await supabase
-            .from('profiles')
-            .insert({
-              id: userId,
-              full_name: formData.fullName,
-              dni: cleanDni,
-              position: formData.position,
-              role: formData.role,
-              email: userEmail,
-              work_day_type: formData.workDayType,
-              daily_hours: parseFloat(formData.dailyHours)
-            });
-
-          if (manualProfileError) {
-            console.error('❌ Error creando perfil manualmente:', manualProfileError);
-            throw new Error(`No se pudo crear el perfil: ${manualProfileError.message}`);
-          }
-          console.log('✅ Perfil creado manualmente');
-        } else {
-          console.log('✅ Perfil creado por trigger:', checkProfile);
+        if (profileError) {
+          console.error('❌ Error creando perfil:', profileError);
+          throw new Error(`Error al crear perfil: ${profileError.message}`);
         }
 
-        // 🔑 Crear credenciales (esto NO lo hace el trigger)
+        console.log('✅ Perfil creado correctamente');
+
+        // 🔑 Crear credenciales
         console.log('🔑 Creando credenciales...');
         const { error: credsError } = await supabase
           .from('worker_credentials')
@@ -193,7 +173,7 @@ export const WorkersView = () => {
         console.log('✅ Credenciales creadas correctamente');
 
       } else {
-        // ✏️ EDICIÓN: Actualizamos perfil existente
+        // ✏️ EDICIÓN
         console.log('📝 Actualizando trabajador existente...');
         
         const { error: profileError } = await supabase
@@ -213,7 +193,6 @@ export const WorkersView = () => {
           throw new Error(`Error al actualizar: ${profileError.message}`);
         }
 
-        // Upsert de credenciales (crear o actualizar)
         const { error: credsError } = await supabase
           .from('worker_credentials')
           .upsert({
@@ -242,15 +221,12 @@ export const WorkersView = () => {
     } catch (err: any) {
       console.error('❌ Error completo al guardar:', err);
       
-      // 🔍 Mensajes de error mejorados
       let errorMsg = err.message || 'Error desconocido';
       
       if (err.message?.includes('duplicate key')) {
-        errorMsg = 'Este DNI ya está registrado en el sistema. Usa el botón "Editar" en su ficha.';
+        errorMsg = 'Este DNI ya está registrado. Usa el botón "Editar".';
       } else if (err.message?.includes('already registered')) {
-        errorMsg = 'El email ya está registrado. Elimina el usuario en Authentication de Supabase.';
-      } else if (err.message?.includes('violates')) {
-        errorMsg = 'Error de base de datos. Verifica que las políticas RLS estén configuradas correctamente.';
+        errorMsg = 'El email ya existe en Authentication.';
       }
       
       toast({ 
