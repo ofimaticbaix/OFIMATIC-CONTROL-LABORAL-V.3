@@ -39,6 +39,7 @@ export const WorkersView = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      // Estas consultas fallan si no hay políticas de SELECT activas
       const { data: p } = await supabase.from('profiles').select('*').order('full_name');
       const { data: c } = await supabase.from('worker_credentials').select('*');
       setProfiles(p || []);
@@ -84,6 +85,7 @@ export const WorkersView = () => {
       const technicalPassword = `worker_${formData.password}_${cleanDni}`;
 
       if (editingProfile) {
+        // ACTUALIZACIÓN
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -106,7 +108,7 @@ export const WorkersView = () => {
         if (credError) throw credError;
         toast({ title: 'Actualizado', description: 'Cambios guardados correctamente.' });
       } else {
-        // NUEVO ALTA CON UPSERT PARA EVITAR COLISIONES
+        // NUEVO ALTA (Requiere políticas de INSERT)
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: userEmail,
           password: technicalPassword,
@@ -114,7 +116,7 @@ export const WorkersView = () => {
         });
 
         if (authError) throw authError;
-        if (!authData.user) throw new Error("No se recibió respuesta de autenticación.");
+        if (!authData.user) throw new Error("Error de autenticación.");
 
         const { error: profileInsertError } = await supabase.from('profiles').upsert({
           id: authData.user.id,
@@ -136,7 +138,7 @@ export const WorkersView = () => {
 
         if (credInsertError) throw credInsertError;
 
-        toast({ title: '¡Éxito!', description: 'Usuario registrado correctamente.' });
+        toast({ title: 'Éxito', description: 'Registrado correctamente.' });
       }
 
       await loadData();
@@ -152,7 +154,12 @@ export const WorkersView = () => {
     }
   };
 
-  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto h-10 w-10 text-primary" /></div>;
+  if (loading) return (
+    <div className="p-20 text-center flex flex-col items-center gap-4 text-foreground">
+      <Loader2 className="animate-spin h-10 w-10 text-primary" />
+      <p className="text-xs font-black uppercase tracking-widest opacity-70">Cargando...</p>
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans text-foreground">
@@ -163,7 +170,6 @@ export const WorkersView = () => {
         </Button>
       </div>
 
-      {/* TABLA DE TRABAJADORES */}
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
@@ -201,7 +207,7 @@ export const WorkersView = () => {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-3 items-center">
-                    <div className="[&_button]:text-black [&_button]:dark:text-white font-bold transition-opacity hover:opacity-70">
+                    <div className="[&_button]:text-black [&_button]:dark:text-white font-bold">
                       <MonthlyReportDialog profile={p} />
                     </div>
                     <button onClick={() => handleOpenDialog(p)} className="text-muted-foreground hover:text-foreground p-2 rounded-full">
@@ -217,10 +223,9 @@ export const WorkersView = () => {
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 pt-4 text-foreground">
+            {/* Campos personales */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">Nombre Completo</Label>
@@ -231,6 +236,8 @@ export const WorkersView = () => {
                 <Input required value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.toUpperCase()})} className="bg-muted/30 border-input" />
               </div>
             </div>
+
+            {/* Puesto y PIN */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold uppercase opacity-70">Puesto</Label>
@@ -240,15 +247,20 @@ export const WorkersView = () => {
                 <Label className="text-[10px] font-bold uppercase opacity-70">Tipo de Cuenta</Label>
                 <Select value={formData.role} onValueChange={v => setFormData({...formData, role: v})}>
                   <SelectTrigger className="bg-muted/30 border-input"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-background border"><SelectItem value="worker">Trabajador</SelectItem><SelectItem value="admin">Administrador</SelectItem></SelectContent>
+                  <SelectContent className="bg-background border">
+                    <SelectItem value="worker">Trabajador</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
             </div>
+
             <div className="p-5 bg-primary/5 border border-primary/20 rounded-lg">
-              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso (Editable)</Label>
+              <Label className="text-[10px] font-black uppercase text-primary">PIN de Acceso</Label>
               <Input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="bg-transparent border-none text-3xl font-mono font-black tracking-widest p-0 h-auto focus-visible:ring-0" maxLength={4} />
             </div>
-            
+
+            {/* Configuración de Jornada */}
             <div className="space-y-4 border-t pt-5">
               <Label className="text-[10px] font-black uppercase opacity-70">Configuración de la Jornada</Label>
               <Select value={formData.workDayType} onValueChange={v => setFormData({...formData, workDayType: v})}>
@@ -259,9 +271,8 @@ export const WorkersView = () => {
                 </SelectContent>
               </Select>
 
-              {/* HORARIO PERSONALIZADO VISIBLE */}
               {formData.workDayType === 'Estándar' ? (
-                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border animate-in fade-in duration-300">
+                <div className="flex items-center gap-4 bg-muted/20 p-5 rounded-lg border">
                   <Clock className="text-primary h-5 w-5" />
                   <div className="flex-1">
                     <Label className="text-[10px] font-bold uppercase opacity-70">Horas diarias estimadas</Label>
