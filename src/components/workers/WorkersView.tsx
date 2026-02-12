@@ -159,8 +159,8 @@ export const WorkersView = () => {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-3 items-center">
-                      {/* BOTÓN INFORME: Fondo Verde y Letras Blancas para Light Mode */}
-                      <div className="bg-[#10b981] hover:bg-[#059669] text-white rounded-md flex items-center shadow-sm transition-colors px-2 py-1">
+                      {/* BOTÓN INFORME: Fondo Verde, Letras Negras en Light Mode y Blancas en Dark Mode */}
+                      <div className="bg-[#10b981] hover:bg-[#059669] text-black dark:text-white rounded-md flex items-center shadow-sm transition-colors px-2 py-1">
                         <MonthlyReportDialog profile={p} />
                       </div>
                       <button 
@@ -180,6 +180,7 @@ export const WorkersView = () => {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        {/* ... resto del componente Dialog permanece igual ... */}
         <DialogContent className="max-w-2xl bg-background border shadow-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-black uppercase italic text-xl tracking-tight text-foreground">Ficha de Personal</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 pt-4">
