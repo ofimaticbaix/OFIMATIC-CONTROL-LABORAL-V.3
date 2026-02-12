@@ -8,9 +8,17 @@ export const ThemeToggle = ({ className }: { className?: string }) => {
   useEffect(() => {
     const root = document.documentElement;
     const stored = localStorage.getItem('theme');
-    if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    
+    // CAMBIO CLAVE: Solo ponemos modo oscuro si hay un registro previo que diga 'dark'
+    // Eliminamos la comprobación de matchMedia('(prefers-color-scheme: dark)')
+    if (stored === 'dark') {
       root.classList.add('dark');
       setIsDark(true);
+    } else {
+      root.classList.remove('dark');
+      setIsDark(false);
+      // Opcional: Forzamos light si no hay nada guardado
+      if (!stored) localStorage.setItem('theme', 'light');
     }
   }, []);
 
@@ -31,7 +39,7 @@ export const ThemeToggle = ({ className }: { className?: string }) => {
     <button
       onClick={toggleTheme}
       className={cn(
-        'relative flex items-center justify-center h-10 w-10 transition-all duration-200',
+        'relative flex items-center justify-center h-10 w-10 transition-all duration-200 rounded-lg',
         'bg-sidebar-accent hover:bg-sidebar-primary text-sidebar-foreground',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className
@@ -39,9 +47,9 @@ export const ThemeToggle = ({ className }: { className?: string }) => {
       aria-label={isDark ? 'Activar modo claro' : 'Activar modo oscuro'}
     >
       {isDark ? (
-        <Sun className="h-5 w-5" />
+        <Sun className="h-5 w-5 animate-in zoom-in duration-300" />
       ) : (
-        <Moon className="h-5 w-5" />
+        <Moon className="h-5 w-5 animate-in zoom-in duration-300" />
       )}
     </button>
   );
