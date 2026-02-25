@@ -26,75 +26,97 @@ const menuItems = [
 
 export const Sidebar = ({ currentView, onViewChange, profile, isAdmin, onLogout }: SidebarProps) => {
   return (
-    <aside className="flex h-screen w-72 md:w-64 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="relative flex h-20 items-center gap-4 px-6 overflow-hidden">
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-        <div className="relative flex h-12 w-12 items-center justify-center bg-primary">
-          <Clock className="h-6 w-6 text-primary-foreground" />
-        </div>
-        <div className="flex-1">
-          {/* CAMBIO DE NOMBRE AQUÍ */}
-          <h1 className="font-display text-lg font-bold tracking-tight uppercase">Ofimatic</h1>
-          <p className="text-xs font-medium tracking-widest text-sidebar-foreground/60 uppercase">Control Laboral</p>
-        </div>
-        <ThemeToggle />
-      </div>
-
-      <div className="flex h-1"><div className="flex-1 bg-primary" /><div className="w-8 bg-accent" /><div className="w-4 bg-secondary" /></div>
-
-      {profile && (
-        <div className="relative px-6 py-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 items-center justify-center bg-sidebar-accent text-sidebar-foreground font-display font-bold text-sm uppercase">
-              {profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+    // CONTENEDOR PRINCIPAL: Ahora es flotante, con padding para separarlo de los bordes, y transparente
+    <aside className="flex h-screen w-72 md:w-[280px] flex-col p-4 sm:p-6 lg:py-8 lg:pl-8 bg-transparent">
+      
+      {/* EL CRISTAL: Este div es el que tiene el fondo semitransparente y el blur */}
+      <div className="flex h-full w-full flex-col rounded-[2.5rem] bg-white/60 dark:bg-slate-900/60 backdrop-blur-3xl border border-white/50 dark:border-slate-700/50 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] overflow-hidden">
+        
+        {/* CABECERA (Logo y Nombre) */}
+        <div className="flex items-center justify-between px-6 pt-8 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+              <Clock className="h-5 w-5" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-display text-sm font-semibold truncate">{profile.full_name}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={cn("inline-flex items-center px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase", isAdmin ? "bg-primary text-primary-foreground" : "bg-sidebar-accent text-sidebar-foreground")}>
-                  {isAdmin ? 'Admin' : 'Worker'}
-                </span>
-              </div>
-              {profile.department && <p className="text-xs text-sidebar-foreground/50 mt-1 truncate">{profile.department}</p>}
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white uppercase">Ofimatic</h1>
+              <p className="text-[9px] font-bold tracking-[0.2em] text-slate-500 uppercase">Control Laboral</p>
             </div>
           </div>
+          <ThemeToggle />
         </div>
-      )}
 
-      <div className="h-px bg-sidebar-border" />
+        {/* PERFIL DEL USUARIO */}
+        {profile && (
+          <div className="px-6 py-4">
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/50 dark:bg-slate-800/50 border border-white/40 dark:border-slate-700 shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm uppercase">
+                {profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{profile.full_name}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={cn(
+                    "inline-flex items-center px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase rounded-full", 
+                    isAdmin ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300" : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                  )}>
+                    {isAdmin ? 'Admin' : 'Worker'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-      <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-        {menuItems.map((item) => {
-          if (item.adminOnly && !isAdmin) return null;
-          const Icon = item.icon;
-          const isActive = currentView === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onViewChange(item.id)}
-              className={cn('group relative flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-all duration-200', isActive ? 'bg-sidebar-primary text-sidebar-primary-foreground' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground')}
-            >
-              {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-secondary" />}
-              <Icon className={cn("h-5 w-5 transition-transform", isActive ? "scale-110" : "group-hover:scale-105")} />
-              <span className="font-display tracking-wide uppercase text-xs">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+        {/* SEPARADOR SUTIL */}
+        <div className="mx-6 h-px bg-slate-200/50 dark:bg-slate-700/50" />
 
-      <div className="h-px bg-sidebar-border" />
-      <div className="p-3">
-        <button onClick={onLogout} className="group flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-sidebar-foreground/70 transition-all duration-200 hover:bg-destructive hover:text-destructive-foreground">
-          <LogOut className="h-5 w-5 transition-transform group-hover:scale-105" />
-          <span className="font-display tracking-wide uppercase text-xs">Cerrar Sesión</span>
-        </button>
+        {/* NAVEGACIÓN */}
+        <nav className="flex-1 space-y-1.5 px-4 py-6 overflow-y-auto scrollbar-hide">
+          {menuItems.map((item) => {
+            if (item.adminOnly && !isAdmin) return null;
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => onViewChange(item.id)}
+                className={cn(
+                  'group relative flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-all duration-300 rounded-2xl', 
+                  isActive 
+                    ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-100 dark:border-slate-700' 
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+                )}
+              >
+                <Icon className={cn("h-5 w-5 transition-transform", isActive ? "scale-110" : "group-hover:scale-110")} />
+                <span className="font-semibold tracking-wide text-[13px]">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* SEPARADOR SUTIL */}
+        <div className="mx-6 h-px bg-slate-200/50 dark:bg-slate-700/50" />
+        
+        {/* PIE DE SIDEBAR (Cerrar Sesión y Legal) */}
+        <div className="p-4 space-y-4 pb-6">
+          <button 
+            onClick={onLogout} 
+            className="group flex w-full items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-slate-600 dark:text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+          >
+            <LogOut className="h-5 w-5 transition-transform group-hover:scale-110" />
+            <span className="font-semibold tracking-wide text-[13px]">Cerrar Sesión</span>
+          </button>
+          
+          <div className="px-4 text-center">
+            <p className="text-[9px] text-slate-400 font-medium uppercase tracking-[0.1em] leading-relaxed">
+              RD-ley 8/2019<br />Conservación 4 años
+            </p>
+          </div>
+        </div>
+
       </div>
-
-      <div className="relative px-6 py-4">
-        <div className="absolute right-0 top-0 bottom-0 w-1 bg-accent" />
-        <p className="text-[10px] text-sidebar-foreground/40 uppercase tracking-wider leading-relaxed">RD-ley 8/2019<br />Conservación 4 años</p>
-      </div>
-      <div className="flex h-1"><div className="w-8 bg-secondary" /><div className="w-4 bg-accent" /><div className="flex-1 bg-primary" /></div>
     </aside>
   );
 };
