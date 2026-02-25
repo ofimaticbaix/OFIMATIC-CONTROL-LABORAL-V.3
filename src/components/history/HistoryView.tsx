@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, Building2, Home, BarChart3, List, Pause, Filter, Loader2 } from 'lucide-react';
+// 👇 AQUÍ ESTÁ LA CORRECCIÓN: Añadido LayoutDashboard
+import { Calendar, Clock, MapPin, Building2, Home, BarChart3, List, Pause, Filter, Loader2, LayoutDashboard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -281,7 +282,7 @@ export const HistoryView = ({ profile }: HistoryViewProps) => {
           </div>
         </TabsContent>
 
-        {/* PESTAÑA: ESTADÍSTICAS (Ya la tenías, solo le hemos puesto el contenedor glassmorphism alrededor si hiciera falta dentro de su componente, pero el espacio queda preparado) */}
+        {/* PESTAÑA: ESTADÍSTICAS */}
         <TabsContent value="charts" className="space-y-6 animate-in fade-in zoom-in-[0.98] duration-500">
           <div className="relative overflow-hidden rounded-[2rem] bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/40 dark:border-slate-700/50 shadow-xl p-2 sm:p-6">
              <DashboardCharts records={recordsForCharts} />
