@@ -1,4 +1,5 @@
-import { Clock, Users, AlertTriangle, LayoutDashboard, LogOut, Settings, Shield, Palmtree } from 'lucide-react';
+// 1. Quitamos 'Clock' de las importaciones, ya no lo necesitamos.
+import { Users, AlertTriangle, LayoutDashboard, LogOut, Settings, Shield, Palmtree } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Profile } from '@/types';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -12,7 +13,9 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { id: 'clock', label: 'Fichaje', icon: Clock },
+  // El icono de 'Clock' aquí se mantiene para el elemento del menú "Fichaje"
+  // Si también quieres cambiar este, avísame. De momento, lo dejamos.
+  { id: 'clock', label: 'Fichaje', icon: Clock }, 
   { id: 'history', label: 'Mi Historial', icon: LayoutDashboard },
   { id: 'incidents', label: 'Incidencias', icon: AlertTriangle },
   { id: 'vacations', label: 'Vacaciones', icon: Palmtree },
@@ -24,19 +27,29 @@ const menuItems = [
   { id: 'settings', label: 'Ajustes', icon: Settings, adminOnly: true },
 ];
 
+// Necesitamos importar Clock de nuevo solo para el array de menuItems
+import { Clock } from 'lucide-react';
+
+
 export const Sidebar = ({ currentView, onViewChange, profile, isAdmin, onLogout }: SidebarProps) => {
   return (
-    // CONTENEDOR PRINCIPAL: Ahora es flotante, con padding para separarlo de los bordes, y transparente
     <aside className="flex h-screen w-72 md:w-[280px] flex-col p-4 sm:p-6 lg:py-8 lg:pl-8 bg-transparent">
       
-      {/* EL CRISTAL: Este div es el que tiene el fondo semitransparente y el blur */}
       <div className="flex h-full w-full flex-col rounded-[2.5rem] bg-white/60 dark:bg-slate-900/60 backdrop-blur-3xl border border-white/50 dark:border-slate-700/50 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] overflow-hidden">
         
         {/* CABECERA (Logo y Nombre) */}
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-              <Clock className="h-5 w-5" />
+            {/* 2. & 3. Sustituimos el contenedor azul y el icono por la imagen de tu logo.
+              Hemos cambiado el fondo a blanco/oscuro con un borde sutil para que el logo
+              resalte como un icono de app nativa.
+            */}
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white dark:bg-slate-800 shadow-sm border border-slate-200/50 dark:border-slate-700/50 p-1">
+              <img 
+                src="/LOGO_APP.jpeg" // Asegúrate de que el archivo esté en la carpeta /public
+                alt="Logo Ofimatic"
+                className="h-full w-full object-contain rounded-xl" // object-contain ajusta la imagen sin cortarla
+              />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white uppercase">Ofimatic</h1>
