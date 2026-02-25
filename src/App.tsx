@@ -24,17 +24,21 @@ const App = () => (
           <ErrorBoundary>
             
             {/* 👇 ENVOLTORIO GLOBAL GLASSMORPHISM (Estilo Apple) 👇 */}
-            <div className="min-h-screen relative font-sans text-slate-900 dark:text-slate-100 selection:bg-blue-200 dark:selection:bg-blue-900/50">
+            <div className="min-h-screen relative font-sans text-slate-900 dark:text-slate-100 selection:bg-blue-200 dark:selection:bg-blue-900/50 z-0">
               
-              {/* Fondo base con "manchas" de color difuminadas (El secreto del cristal) */}
-              <div className="fixed inset-0 z-[-1] bg-slate-50/50 dark:bg-slate-950 overflow-hidden pointer-events-none">
-                {/* Gradiente superior izquierdo (Azul suave) */}
-                <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full bg-blue-400/10 dark:bg-blue-600/10 blur-[120px]" />
-                {/* Gradiente inferior derecho (Índigo/Morado muy suave) */}
-                <div className="absolute -bottom-[20%] -right-[10%] w-[60%] h-[60%] rounded-full bg-indigo-400/10 dark:bg-indigo-600/10 blur-[100px]" />
+              {/* FONDO DINÁMICO CON ORBES DESENFOCADOS */}
+              <div className="fixed inset-0 z-[-1] bg-[#f8fafc] dark:bg-slate-950 overflow-hidden pointer-events-none">
+                {/* Orbe azul superior izquierdo */}
+                <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vh] rounded-full bg-blue-500/30 dark:bg-blue-600/40 blur-[100px]" />
+                
+                {/* Orbe morado inferior derecho */}
+                <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vh] rounded-full bg-purple-500/30 dark:bg-purple-600/40 blur-[100px]" />
+                
+                {/* Orbe esmeralda central para dar riqueza tonal */}
+                <div className="absolute top-[30%] left-[30%] w-[40vw] h-[40vh] rounded-full bg-emerald-400/20 dark:bg-emerald-500/20 blur-[120px]" />
               </div>
 
-              {/* El enrutador de las páginas irá por encima de este fondo mágico */}
+              {/* El enrutador de las páginas renderiza el contenido por encima del fondo */}
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<WorkerLogin />} />
@@ -46,6 +50,7 @@ const App = () => (
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              
             </div>
             
           </ErrorBoundary>
