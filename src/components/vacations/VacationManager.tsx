@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, XCircle, Plus, Trash2, Palmtree } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Calendar, CheckCircle2, XCircle, Plus, Trash2, Palmtree, Loader2, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { Profile } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface TimeOffRequest {
   id: string;
@@ -51,11 +51,8 @@ export const VacationManager = ({ profile }: VacationManagerProps) => {
       }
 
       const { data, error } = await query;
-
       if (error) {
-        // Si hay un error (como que la tabla está vacía o no existe aún), 
-        // simplemente ponemos la lista vacía en lugar de mostrar el error rojo.
-        console.warn("Consulta de vacaciones vacía o error inicial:", error.message);
+        console.warn("Error inicial de vacaciones:", error.message);
         setRequests([]);
       } else {
         setRequests(data as any[] || []);
@@ -70,7 +67,7 @@ export const VacationManager = ({ profile }: VacationManagerProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!startDate || !endDate) {
-      toast({ variant: 'destructive', title: 'Faltan fechas', description: 'Selecciona desde y hasta cuándo.' });
+      toast({ variant: 'destructive', title: 'Atención', description: 'Por favor, selecciona el rango de fechas.' });
       return;
     }
 
@@ -99,7 +96,7 @@ export const VacationManager = ({ profile }: VacationManagerProps) => {
     if (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar.' });
     } else {
-      toast({ title: newStatus === 'approved' ? 'Aprobado' : 'Rechazado', description: 'Estado actualizado.' });
+      toast({ title: newStatus === 'approved' ? 'Aprobado' : 'Rechazado', description: 'Estado actualizado correctamente.' });
       loadRequests();
     }
   };
@@ -117,122 +114,189 @@ export const VacationManager = ({ profile }: VacationManagerProps) => {
 
   const getStatusBadge = (s: string) => {
     switch (s) {
-      case 'approved': return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white">Aprobado</Badge>;
-      case 'rejected': return <Badge variant="destructive">Rechazado</Badge>;
-      default: return <Badge variant="secondary" className="animate-pulse">Pendiente</Badge>;
+      case 'approved': 
+        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">Aprobado</Badge>;
+      case 'rejected': 
+        return <Badge className="bg-red-100 text-red-700 border-red-200 dark:bg-red-500/20 dark:text-red-400 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">Rechazado</Badge>;
+      default: 
+        return <Badge className="bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400 animate-pulse font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">Pendiente</Badge>;
     }
   };
 
-  const whiteCalendarClass = "[&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer";
+  if (loading) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+      <Loader2 className="animate-spin h-10 w-10 text-blue-500/50" />
+      <p className="text-xs font-bold tracking-[0.2em] text-slate-400 uppercase">Sincronizando calendario...</p>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Palmtree className="h-5 w-5 text-primary" />
-            Gestión de Vacaciones
-          </CardTitle>
-          <CardDescription>Solicita tus días libres.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-4 items-end">
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Calendar className="h-3 w-3 text-primary" /> Desde
-              </Label>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+      
+      {/* HEADER */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2">
+        <div className="space-y-1">
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+            <Palmtree className="h-7 w-7 text-emerald-500" />
+            Vacaciones
+          </h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
+            Gestiona tus descansos y solicitudes de tiempo libre.
+          </p>
+        </div>
+      </div>
+
+      {/* FORMULARIO DE SOLICITUD (Widget Glass) */}
+      <div className="relative overflow-hidden rounded-[2.5rem] bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border border-white/40 dark:border-slate-700/50 shadow-xl p-6 sm:p-8">
+        <div className="flex items-center gap-2 mb-6">
+           <div className="h-2 w-2 rounded-full bg-blue-500" />
+           <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400">Nueva Solicitud</h3>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="grid gap-6 md:grid-cols-4 items-end">
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Desde</Label>
+            <div className="relative">
               <Input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
                 required
-                className={whiteCalendarClass}
+                className="h-12 rounded-2xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm focus:ring-blue-500/20"
               />
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Calendar className="h-3 w-3 text-primary" /> Hasta
-              </Label>
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Hasta</Label>
+            <div className="relative">
               <Input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
                 required
-                className={whiteCalendarClass}
+                className="h-12 rounded-2xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm focus:ring-blue-500/20"
               />
             </div>
-            <div className="space-y-2 md:col-span-1">
-              <Label>Comentario (Opcional)</Label>
-              <Input placeholder="Ej: Viaje familiar..." value={comment} onChange={e => setComment(e.target.value)} />
-            </div>
-            <Button type="submit" className="w-full gap-2">
-              <Plus className="h-4 w-4" /> Solicitar Vacaciones
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
-            {isAdmin ? 'Solicitudes de la Plantilla' : 'Mis Vacaciones'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  {isAdmin && <TableHead>Trabajador</TableHead>}
-                  <TableHead>Desde</TableHead>
-                  <TableHead>Hasta</TableHead>
-                  <TableHead>Comentario</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-4">Cargando...</TableCell></TableRow>
-                ) : requests.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No hay solicitudes recientes.</TableCell></TableRow>
-                ) : (
-                  requests.map((req) => (
-                    <TableRow key={req.id}>
-                      {isAdmin && <TableCell className="font-bold text-xs">{req.profiles?.full_name}</TableCell>}
-                      <TableCell className="text-xs">{new Date(req.start_date).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-xs">{new Date(req.end_date).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-xs italic text-muted-foreground max-w-[200px] truncate" title={req.comment}>{req.comment || '-'}</TableCell>
-                      <TableCell>{getStatusBadge(req.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {isAdmin && req.status === 'pending' ? (
-                            <>
-                              <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-500 hover:bg-emerald-50" onClick={() => handleStatusChange(req.id, 'approved')} title="Aprobar">
-                                <CheckCircle2 className="h-4 w-4" />
-                              </Button>
-                              <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleStatusChange(req.id, 'rejected')} title="Rechazar">
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </>
-                          ) : (
-                            req.user_id === profile.id && req.status === 'pending' && (
-                              <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(req.id)} title="Cancelar">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="space-y-2 md:col-span-1">
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Comentario (Opcional)</Label>
+            <Input 
+              placeholder="Ej: Vacaciones verano..." 
+              value={comment} 
+              onChange={e => setComment(e.target.value)} 
+              className="h-12 rounded-2xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm focus:ring-blue-500/20"
+            />
+          </div>
+
+          <Button type="submit" className="h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-95">
+            <Plus className="h-4 w-4 mr-2" /> Enviar Solicitud
+          </Button>
+        </form>
+      </div>
+
+      {/* LISTADO DE SOLICITUDES (Main Glass Container) */}
+      <div className="relative overflow-hidden rounded-[2.5rem] bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800 shadow-2xl">
+        
+        <div className="p-6 border-b border-slate-200/60 dark:border-slate-800 bg-slate-50/50 dark:bg-black/10 flex justify-between items-center">
+          <h3 className="font-bold text-slate-900 dark:text-white tracking-tight">
+            {isAdmin ? 'Solicitudes del Equipo' : 'Mis Solicitudes'}
+          </h3>
+          <Badge variant="outline" className="bg-white/50 dark:bg-slate-800/50 text-slate-500 font-bold uppercase text-[9px] tracking-tighter">
+            Total: {requests.length}
+          </Badge>
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-b border-slate-200/60 dark:border-slate-800 hover:bg-transparent">
+                {isAdmin && <TableHead className="py-4 pl-8 text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Empleado</TableHead>}
+                <TableHead className="py-4 pl-6 text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Periodo</TableHead>
+                <TableHead className="py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Motivo / Notas</TableHead>
+                <TableHead className="py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Estado</TableHead>
+                <TableHead className="py-4 pr-8 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Gestión</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {requests.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-48 text-center">
+                    <div className="flex flex-col items-center justify-center text-slate-400 opacity-60">
+                      <Palmtree className="h-12 w-12 mb-3" />
+                      <p className="font-medium tracking-tight">No hay solicitudes registradas.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                requests.map((req) => (
+                  <TableRow key={req.id} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all duration-300 group">
+                    
+                    {isAdmin && (
+                      <TableCell className="py-5 pl-8">
+                        <span className="font-bold text-slate-800 dark:text-slate-200 text-[13px]">{req.profiles?.full_name}</span>
+                      </TableCell>
+                    )}
+
+                    <TableCell className="py-5 pl-6 font-semibold">
+                      <div className="flex items-center gap-2 bg-white/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700 w-fit">
+                        <span className="text-slate-800 dark:text-slate-300 font-mono text-xs">{new Date(req.start_date).toLocaleDateString()}</span>
+                        <span className="text-slate-300">→</span>
+                        <span className="text-slate-800 dark:text-slate-300 font-mono text-xs">{new Date(req.end_date).toLocaleDateString()}</span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell className="py-5">
+                      <div className="flex items-center gap-2 max-w-[200px]">
+                        <MessageSquare className="h-3 w-3 text-slate-300 shrink-0" />
+                        <span className="text-xs text-slate-500 italic truncate" title={req.comment}>{req.comment || 'Sin notas'}</span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell className="py-5">
+                      {getStatusBadge(req.status)}
+                    </TableCell>
+
+                    <TableCell className="py-5 pr-8 text-right">
+                      <div className="flex justify-end gap-2 opacity-20 group-hover:opacity-100 transition-all duration-300">
+                        {isAdmin && req.status === 'pending' ? (
+                          <>
+                            <button 
+                              onClick={() => handleStatusChange(req.id, 'approved')} 
+                              className="h-9 w-9 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-sm border border-emerald-100"
+                              title="Aprobar"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleStatusChange(req.id, 'rejected')} 
+                              className="h-9 w-9 flex items-center justify-center rounded-xl bg-red-50 text-red-600 hover:bg-red-500 hover:text-white transition-all shadow-sm border border-red-100"
+                              title="Rechazar"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          req.user_id === profile.id && req.status === 'pending' && (
+                            <button 
+                              onClick={() => handleDelete(req.id)} 
+                              className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all shadow-sm border border-slate-100"
+                              title="Cancelar"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </div>
   );
 };
-
