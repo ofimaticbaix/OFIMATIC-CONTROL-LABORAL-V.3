@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button'; 
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 export const AdminPanel = () => {
   const [groupedEntries, setGroupedEntries] = useState<any[]>([]);
