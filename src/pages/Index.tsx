@@ -54,17 +54,15 @@ const Index = () => {
   if (loading) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-transparent">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-          <p className="text-xs font-bold tracking-widest text-slate-500 uppercase">Iniciando sistema...</p>
+        <div className="flex flex-col items-center gap-4 text-white">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-400" />
+          <p className="text-xs font-bold tracking-[0.2em] uppercase opacity-70">Cargando Sistema...</p>
         </div>
       </div>
     );
   }
 
-  if (!user || !profile) {
-    return null;
-  }
+  if (!user || !profile) return null;
 
   const renderView = () => {
     switch (currentView) {
@@ -81,28 +79,27 @@ const Index = () => {
   };
 
   return (
-    // Hemos cambiado el bg-background sólido por bg-transparent para dejar ver los orbes de App.tsx
     <div className="flex h-dvh w-full overflow-hidden bg-transparent">
       
-      {/* Botón menú móvil (Estilo Apple flotante) */}
+      {/* Botón menú móvil */}
       <Button
         variant="ghost"
         size="icon"
         className={cn(
           "fixed left-4 top-4 z-50 lg:hidden h-12 w-12 rounded-full shadow-lg backdrop-blur-md transition-all duration-300",
           isMobileMenuOpen 
-            ? "bg-slate-900/80 text-white dark:bg-white/80 dark:text-slate-900 border border-white/10" 
-            : "bg-white/80 text-slate-900 dark:bg-slate-900/80 dark:text-white border border-slate-200/50 dark:border-slate-700/50"
+            ? "bg-slate-900/80 text-white border border-white/10" 
+            : "bg-white/80 text-slate-900 border border-slate-200/50"
         )}
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
       >
         {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
       </Button>
 
-      {/* Contenedor del Sidebar (Lo hacemos translúcido en su propio componente luego) */}
+      {/* Sidebar con efecto Glassmorphism */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-40 transform transition-transform duration-500 cubic-bezier(0.32, 0.72, 0, 1) lg:relative lg:translate-x-0 w-[280px]',
+          'fixed inset-y-0 left-0 z-40 transform transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] lg:relative lg:translate-x-0 w-[280px]',
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -115,26 +112,23 @@ const Index = () => {
         />
       </div>
 
-      {/* Overlay fondo desenfocado para móvil */}
+      {/* Overlay móvil */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-30 bg-slate-900/20 dark:bg-black/40 backdrop-blur-md lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm lg:hidden transition-opacity duration-300"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Panel Principal Glassmorphism */}
-      <main className="flex-1 flex flex-col w-full h-full relative overflow-hidden p-2 sm:p-4 md:p-6 lg:p-8">
-        
-        {/* Contenedor Cristal (El cuadro blanco translúcido donde se renderiza el contenido) */}
-        <div className="relative h-full w-full rounded-[2rem] sm:rounded-[2.5rem] bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] overflow-y-auto overflow-x-hidden scrollbar-hide transition-all duration-500">
+      {/* Main Panel */}
+      <main className="flex-1 flex flex-col w-full h-full relative overflow-hidden p-2 sm:p-4 lg:p-6">
+        <div className="relative h-full w-full rounded-[2.5rem] bg-white/40 dark:bg-slate-900/40 backdrop-blur-3xl border border-white/30 dark:border-slate-800/50 shadow-2xl overflow-hidden flex flex-col transition-all duration-500">
           
-          <div className="w-full h-full p-4 sm:p-6 lg:p-10">
-            {/* Espaciador para el botón de menú en móvil */}
-            <div className="h-12 lg:hidden mb-6" />
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-8 lg:p-10 scrollbar-hide">
+            {/* Espaciador móvil */}
+            <div className="h-10 lg:hidden mb-4" />
             
-            {/* Aquí dentro se carga la vista seleccionada */}
-            <div className="animate-in fade-in zoom-in-[0.98] duration-500 ease-out">
+            <div className="max-w-7xl mx-auto animate-in fade-in zoom-in-[0.99] duration-700">
               {renderView()}
             </div>
           </div>
