@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, Clock, CheckCircle2, XCircle, HelpCircle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Plus, Clock, CheckCircle2, XCircle, HelpCircle, Loader2, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,7 +67,6 @@ export const IncidentsView = ({ profile, isAdmin }: IncidentsViewProps) => {
 
       const { data, error } = await query;
 
-      // Silenciamos el error visual para evitar falsas alarmas
       if (error) {
         console.error('Detalle del error Supabase:', error.message);
       }
@@ -190,62 +189,60 @@ export const IncidentsView = ({ profile, isAdmin }: IncidentsViewProps) => {
           </p>
         </div>
         
-        {!isAdmin && (
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="rounded-full bg-slate-900 dark:bg-white dark:text-black hover:bg-slate-800 text-white px-6 shadow-lg shadow-slate-900/20 font-bold uppercase text-[10px] tracking-widest h-11 transition-transform active:scale-95">
-                <Plus className="h-4 w-4 mr-2" />
-                Nueva Incidencia
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md rounded-[2rem] bg-white/95 dark:bg-slate-900/95 backdrop-blur-3xl border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95">
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold tracking-tight text-center text-slate-900 dark:text-white">Reportar Incidencia</DialogTitle>
-                <DialogDescription className="text-center text-xs text-slate-500">Completa los datos para registrar el evento en tu jornada.</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-5 pt-4">
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="rounded-full bg-slate-900 dark:bg-white dark:text-black hover:bg-slate-800 text-white px-6 shadow-lg shadow-slate-900/20 font-bold uppercase text-[10px] tracking-widest h-11 transition-transform active:scale-95">
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva Incidencia
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md rounded-[2rem] bg-white/95 dark:bg-slate-900/95 backdrop-blur-3xl border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold tracking-tight text-center text-slate-900 dark:text-white">Reportar Incidencia</DialogTitle>
+              <DialogDescription className="text-center text-xs text-slate-500">Completa los datos para registrar el evento en tu jornada.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-5 pt-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Tipo *</Label>
+                <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
+                  <SelectTrigger className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 h-12 shadow-sm">
+                    <SelectValue placeholder="Seleccione un motivo" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700">
+                    {incidentTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value} className="rounded-lg">{type.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Tipo *</Label>
-                  <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
-                    <SelectTrigger className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 h-12 shadow-sm">
-                      <SelectValue placeholder="Seleccione un motivo" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700">
-                      {incidentTypes.map((type) => (
-                        <SelectItem key={type.value} value={type.value} className="rounded-lg">{type.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Fecha *</Label>
+                  <Input type="date" required value={formData.affectedDate} onChange={(e) => setFormData({ ...formData, affectedDate: e.target.value })} className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 h-12 shadow-sm" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Fecha *</Label>
-                    <Input type="date" required value={formData.affectedDate} onChange={(e) => setFormData({ ...formData, affectedDate: e.target.value })} className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 h-12 shadow-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Hora</Label>
-                    <Input type="time" value={formData.affectedTime} onChange={(e) => setFormData({ ...formData, affectedTime: e.target.value })} className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 h-12 shadow-sm" />
-                  </div>
-                </div>
-
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Detalles *</Label>
-                  <Textarea required placeholder="Ej: Visita médica, Descanso para comer..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 resize-none shadow-sm" />
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-2.5 rounded-lg mt-2 border border-blue-100 dark:border-blue-900/50">
-                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-bold text-center tracking-wide">💡 Tip: Escribe "Comida" o "Descanso" para auto-aprobación.</p>
-                  </div>
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Hora</Label>
+                  <Input type="time" value={formData.affectedTime} onChange={(e) => setFormData({ ...formData, affectedTime: e.target.value })} className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 h-12 shadow-sm" />
                 </div>
+              </div>
 
-                <DialogFooter className="pt-2">
-                  <Button type="submit" className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 shadow-md">
-                    Enviar Registro
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 ml-1">Detalles *</Label>
+                <Textarea required placeholder="Ej: Visita médica, Descanso para comer..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 resize-none shadow-sm" />
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-2.5 rounded-lg mt-2 border border-blue-100 dark:border-blue-900/50">
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400 font-bold text-center tracking-wide">💡 Tip: Escribe "Comida" o "Descanso" para auto-aprobación.</p>
+                </div>
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button type="submit" className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 shadow-md">
+                  Enviar Registro
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Lista de Incidencias - Mayor Contraste */}
