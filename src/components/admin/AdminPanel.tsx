@@ -1,15 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  Clock, 
-  Loader2, 
-  Search, 
-  Calendar, 
-  ArrowRight, 
-  LayoutDashboard, 
-  FileText, 
-  AlertCircle,
-  MapPin,
-  RefreshCcw
+  Clock, Loader2, Search, Calendar, ArrowRight, 
+  LayoutDashboard, FileText, AlertCircle, RefreshCcw 
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EditTimeEntryDialog } from './EditTimeEntryDialog';
-import { cn } from '@/lib/utils';
 
 export const AdminPanel = () => {
   const [entries, setEntries] = useState<any[]>([]);
@@ -31,6 +22,7 @@ export const AdminPanel = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      // Consulta simplificada para asegurar compatibilidad
       const { data, error } = await supabase
         .from('time_entries')
         .select('*, profiles(full_name)')
@@ -39,15 +31,12 @@ export const AdminPanel = () => {
       if (error) throw error;
       setEntries(data || []);
     } catch (err: any) {
-      console.error("Error Supabase:", err);
-      // Solo mostramos el toast si realmente hay un fallo crítico
-      if (err.code !== 'PGRST116') {
-        toast({ 
-          variant: 'destructive', 
-          title: 'Aviso de Privacidad', 
-          description: 'Revisa las políticas RLS en Supabase para ver datos ajenos.' 
-        });
-      }
+      console.error("Error crítico de sincronización:", err);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error de Privacidad', 
+        description: 'Revisa las políticas RLS en Supabase para ver datos ajenos.' 
+      });
     } finally {
       setLoading(false);
     }
@@ -67,8 +56,6 @@ export const AdminPanel = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-      
-      {/* HEADER TIPO APPLE */}
       <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between px-2">
         <div className="space-y-1">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
@@ -106,7 +93,7 @@ export const AdminPanel = () => {
                 <FileText className="h-4 w-4" />
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em]">Historial Completo</h3>
               </div>
-              <Button variant="ghost" size="icon" onClick={loadData} className="rounded-full hover:bg-white dark:hover:bg-slate-800">
+              <Button variant="ghost" size="icon" onClick={loadData} className="rounded-full hover:bg-white dark:hover:bg-slate-800 transition-colors">
                 <RefreshCcw className="h-4 w-4 text-slate-400" />
               </Button>
             </div>
@@ -116,25 +103,27 @@ export const AdminPanel = () => {
                 <AlertCircle className="h-12 w-12 text-slate-300 opacity-50" />
                 <div className="space-y-1">
                   <p className="font-bold text-slate-400 uppercase text-xs tracking-widest">Sin acceso a los datos</p>
-                  <p className="text-[10px] text-slate-400/60 uppercase">Ejecuta el SQL de políticas en Supabase</p>
+                  <p className="text-[10px] text-slate-400/60 uppercase italic">Asegúrate de haber ejecutado el SQL de limpieza en Supabase</p>
                 </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader className="bg-slate-50/50 dark:bg-black/10">
-                    <TableRow className="border-b border-slate-100 dark:border-slate-800">
-                      <TableHead className="py-5 pl-8 text-[10px] font-bold uppercase tracking-widest text-slate-500">Trabajador</TableHead>
-                      <TableHead className="py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Fecha</TableHead>
-                      <TableHead className="py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">Entrada/Salida</TableHead>
-                      <TableHead className="py-5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Horas</TableHead>
-                      <TableHead className="py-5 pr-8 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Editar</TableHead>
+                    <TableRow className="hover:bg-transparent border-b border-slate-100 dark:border-slate-800">
+                      <TableHead className="py-5 pl-8 text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Trabajador</TableHead>
+                      <TableHead className="py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Fecha</TableHead>
+                      <TableHead className="py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto text-center">Registro</TableHead>
+                      <TableHead className="py-5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Horas</TableHead>
+                      <TableHead className="py-5 pr-8 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 h-auto">Editar</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredEntries.map((entry) => (
-                      <TableRow key={entry.id} className="group border-b border-slate-50 dark:border-slate-800/50 hover:bg-blue-50/30 transition-all">
-                        <TableCell className="py-5 pl-8 font-bold text-slate-700 dark:text-slate-200">{entry.profiles?.full_name || 'Desconocido'}</TableCell>
+                      <TableRow key={entry.id} className="group border-b border-slate-50 dark:border-slate-800/50 last:border-0 hover:bg-blue-50/30 transition-all duration-300">
+                        <TableCell className="py-5 pl-8 font-bold text-slate-700 dark:text-slate-200">
+                          {entry.profiles?.full_name || 'Desconocido'}
+                        </TableCell>
                         <TableCell className="py-5 text-slate-500 font-medium text-xs">{entry.date}</TableCell>
                         <TableCell className="py-5">
                           <div className="flex items-center justify-center gap-3 font-mono text-xs">
@@ -147,7 +136,9 @@ export const AdminPanel = () => {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-5 text-right font-bold text-blue-600">{entry.hours_worked?.toFixed(2)}h</TableCell>
+                        <TableCell className="py-5 text-right font-bold text-blue-600 dark:text-blue-400">
+                          {entry.hours_worked?.toFixed(2)}h
+                        </TableCell>
                         <TableCell className="py-5 pr-8 text-center">
                           <div className="flex justify-center opacity-30 group-hover:opacity-100 transition-opacity">
                             <EditTimeEntryDialog entry={entry} onUpdate={loadData} />
